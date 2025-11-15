@@ -6,8 +6,23 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C08054C92EBBC6E0002C6236 /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = C08054C82EBBC6E0002C6236 /* SDWebImageSwiftUI */; };
+		C08054CF2EBBCE19002C6236 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = C08054CE2EBBCE19002C6236 /* Kingfisher */; };
+		C0894DB12E8EB41700B33A4C /* GaggedAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0894DB02E8EB41700B33A4C /* GaggedAppApp.swift */; };
+		C0894DCD2E8EBF7900B33A4C /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DCC2E8EBF7900B33A4C /* WaterfallGrid */; };
+		C0894DDB2E90308400B33A4C /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DDA2E90308400B33A4C /* FirebaseAnalytics */; };
+		C0894DDD2E90308400B33A4C /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DDC2E90308400B33A4C /* FirebaseAnalyticsCore */; };
+		C0894DDF2E90308400B33A4C /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DDE2E90308400B33A4C /* FirebaseAuth */; };
+		C0894DE12E90308400B33A4C /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DE02E90308400B33A4C /* FirebaseCore */; };
+		C0894DE32E90308400B33A4C /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DE22E90308400B33A4C /* FirebaseFirestore */; };
+		C0894DED2E92DAC700B33A4C /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DEC2E92DAC700B33A4C /* FirebaseStorage */; };
+		C0894DEF2E92DAC700B33A4C /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DEE2E92DAC700B33A4C /* FirebaseStorageCombine-Community */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		C0894DAD2E8EB41700B33A4C /* GaggedApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GaggedApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0894DB02E8EB41700B33A4C /* GaggedAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaggedAppApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +38,16 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0894DDB2E90308400B33A4C /* FirebaseAnalytics in Frameworks */,
+				C0894DE12E90308400B33A4C /* FirebaseCore in Frameworks */,
+				C0894DEF2E92DAC700B33A4C /* FirebaseStorageCombine-Community in Frameworks */,
+				C08054C92EBBC6E0002C6236 /* SDWebImageSwiftUI in Frameworks */,
+				C08054CF2EBBCE19002C6236 /* Kingfisher in Frameworks */,
+				C0894DDD2E90308400B33A4C /* FirebaseAnalyticsCore in Frameworks */,
+				C0894DCD2E8EBF7900B33A4C /* WaterfallGrid in Frameworks */,
+				C0894DED2E92DAC700B33A4C /* FirebaseStorage in Frameworks */,
+				C0894DDF2E90308400B33A4C /* FirebaseAuth in Frameworks */,
+				C0894DE32E90308400B33A4C /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -32,6 +57,7 @@
 		C0894DA42E8EB41700B33A4C = {
 			isa = PBXGroup;
 			children = (
+				C0894DB02E8EB41700B33A4C /* GaggedAppApp.swift */,
 				C0894DAF2E8EB41700B33A4C /* GaggedApp */,
 				C0894DAE2E8EB41700B33A4C /* Products */,
 			);
@@ -65,6 +91,16 @@
 			);
 			name = GaggedApp;
 			packageProductDependencies = (
+				C0894DCC2E8EBF7900B33A4C /* WaterfallGrid */,
+				C0894DDA2E90308400B33A4C /* FirebaseAnalytics */,
+				C0894DDC2E90308400B33A4C /* FirebaseAnalyticsCore */,
+				C0894DDE2E90308400B33A4C /* FirebaseAuth */,
+				C0894DE02E90308400B33A4C /* FirebaseCore */,
+				C0894DE22E90308400B33A4C /* FirebaseFirestore */,
+				C0894DEC2E92DAC700B33A4C /* FirebaseStorage */,
+				C0894DEE2E92DAC700B33A4C /* FirebaseStorageCombine-Community */,
+				C08054C82EBBC6E0002C6236 /* SDWebImageSwiftUI */,
+				C08054CE2EBBCE19002C6236 /* Kingfisher */,
 			);
 			productName = GaggedApp;
 			productReference = C0894DAD2E8EB41700B33A4C /* GaggedApp.app */;
@@ -94,6 +130,12 @@
 			);
 			mainGroup = C0894DA42E8EB41700B33A4C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C0894DCB2E8EBF7900B33A4C /* XCRemoteSwiftPackageReference "WaterfallGrid" */,
+				C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				C08054C72EBBC6E0002C6236 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */,
+				C08054CD2EBBCE19002C6236 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C0894DAE2E8EB41700B33A4C /* Products */;
 			projectDirPath = "";
@@ -119,6 +161,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0894DB12E8EB41700B33A4C /* GaggedAppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -324,6 +367,94 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C08054C72EBBC6E0002C6236 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/SDWebImageSwiftUI.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.1.4;
+			};
+		};
+		C08054CD2EBBCE19002C6236 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.6.1;
+			};
+		};
+		C0894DCB2E8EBF7900B33A4C /* XCRemoteSwiftPackageReference "WaterfallGrid" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/paololeonardi/WaterfallGrid";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
+		C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C08054C82EBBC6E0002C6236 /* SDWebImageSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C08054C72EBBC6E0002C6236 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */;
+			productName = SDWebImageSwiftUI;
+		};
+		C08054CE2EBBCE19002C6236 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C08054CD2EBBCE19002C6236 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+		C0894DCC2E8EBF7900B33A4C /* WaterfallGrid */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DCB2E8EBF7900B33A4C /* XCRemoteSwiftPackageReference "WaterfallGrid" */;
+			productName = WaterfallGrid;
+		};
+		C0894DDA2E90308400B33A4C /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		C0894DDC2E90308400B33A4C /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		C0894DDE2E90308400B33A4C /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		C0894DE02E90308400B33A4C /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		C0894DE22E90308400B33A4C /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		C0894DEC2E92DAC700B33A4C /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		C0894DEE2E92DAC700B33A4C /* FirebaseStorageCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0894DD72E902E8900B33A4C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseStorageCombine-Community";
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C0894DA52E8EB41700B33A4C /* Project object */;
 }
