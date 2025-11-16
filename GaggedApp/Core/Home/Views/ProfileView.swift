@@ -69,6 +69,7 @@ struct ProfileView: View {
                 try await vm.getUserPostsIfNeeded()
                 try await vm.loadUserInfo()
                 vm.sectionLoading = ""
+                vm.getParams()
             }
         }
         .gesture(
@@ -108,7 +109,7 @@ struct ProfileView: View {
             HStack {
                 if !showImageOverlay {
                     ZStack {
-                        profileImageClip(url: vm.profImageUrl, height: 130)
+                        profileImageClip(url: vm.profImageUrl, height: 130, params: vm.profPicParams ?? ProfPicParams(offsetX: 0, offsetY: 0, scale: 1))
                     }
                     .frame(width: 130, height: 130)
                     .matchedGeometryEffect(id: "profPic", in: animation, isSource: true)
@@ -206,7 +207,7 @@ struct ProfileView: View {
                         HStack(spacing: 0){
                             VStack {
                                 Spacer()
-                                profileImageClip(url: vm.profImageUrl, height: 20)
+                                profileImageClip(url: vm.profImageUrl, height: 20, params: vm.profPicParams ?? ProfPicParams(offsetX: 0, offsetY: 0, scale: 1))
                             }
                             VStack(alignment: .leading, spacing: 0){
                                 HStack {
@@ -669,7 +670,7 @@ struct profileImageOverlay: View {
                         .allowsHitTesting(false)
                 }
                 ZStack {
-                    profileImageClip(url: url, height: 225)
+                    profileImageClip(url: url, height: 225, params: profileViewModel.profPicParams ?? ProfPicParams(offsetX: 0, offsetY: 0, scale: 1))
                 }
                 .frame(width: 225, height: 225)
                 .matchedGeometryEffect(id: "profPic", in: namespace, isSource: false)
@@ -794,7 +795,7 @@ struct PhotoCropperView: View {
                 .ignoresSafeArea()
             
             GeometryReader { geo in
-                let cropSize = geo.size.width * 0.6 // roughly half screen width
+                let cropSize = 300.0
                 let radius = cropSize / 2
                 let totalScale = max(1.0, min(scale * gestureScale, 4.0)) // 👈 enforce scale live
 
@@ -839,6 +840,8 @@ struct PhotoCropperView: View {
                                             radius: radius,
                                             scale: totalScale
                                         )
+                                        print("WIDTH: ", offset.width, "HEIGHT: ", offset.height)
+                                        print("CROP SIZE: ", cropSize)
                                     }
                             )
                             .gesture(
@@ -850,6 +853,7 @@ struct PhotoCropperView: View {
                                     .onEnded { value in
                                         // Final clamp on gesture end
                                         scale = max(1.0, min(scale * value, 4.0))
+                                        print("TOTAL SCALE", totalScale)
                                     }
                             )
                             .animation(.easeInOut(duration: 0.2), value: totalScale)
@@ -912,65 +916,27 @@ struct PhotoCropperView: View {
     private func saveCroppedImage() {
         guard let image = pickedImage else { return }
 
-        // Match the crop size you used visually in your GeometryReader
-        let cropSize = UIScreen.main.bounds.width * 0.6
-        let totalScale = max(1.0, min(scale, 4.0))
-
-        if let final = renderTransformedImage(
-            image: image,
-            canvasSize: CGSize(width: cropSize, height: cropSize),
-            scale: totalScale,
-            offset: offset
-        ) {
-            // Save to photos for testing
-            isLoading = true
-            Task {
-                let newUrl = try await profileViewModel.uploadNewProfilePicture(final, ogImageUrl: profileViewModel.profImageUrl)
-                if let url = newUrl {
-                    profileViewModel.profImageUrl = url
-                    print("PROFILE IMAGE", profileViewModel.profImageUrl)
-                }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    pickedImage = nil
-                    showImageOverlay = false
-                }
-                hideTabBar = false
-                isLoading = false
-            }
-            print("✅ Cropped & transformed rectangular image saved.")
-        } else {
-            print("❌ Failed to render transformed image.")
-        }
-    }
-    
-    private func renderTransformedImage(
-        image: UIImage,
-        canvasSize: CGSize,
-        scale: CGFloat,
-        offset: CGSize
-    ) -> UIImage? {
-        let renderer = UIGraphicsImageRenderer(size: canvasSize)
-
-        return renderer.image { ctx in
-            // Fill background (optional — comment out for transparency)
-            UIColor.black.setFill()
-            ctx.fill(CGRect(origin: .zero, size: canvasSize))
-
-            // Move origin to center of canvas
-            ctx.cgContext.translateBy(x: canvasSize.width / 2, y: canvasSize.height / 2)
-
-            // Apply translation and scaling
-            ctx.cgContext.translateBy(x: offset.width, y: offset.height)
-            ctx.cgContext.scaleBy(x: scale, y: scale)
-
-            // Move back and draw image centered
-            ctx.cgContext.translateBy(x: -canvasSize.width / 2, y: -canvasSize.height / 2)
-
-            // Draw image to fill
-            image.draw(in: CGRect(origin: .zero, size: canvasSize))
-        }
+        // Current values
+        let totalScale = max(1.0, min(scale * gestureScale, 4.0))
+        let offsetX = offset.width + dragOffset.width
+        let offsetY = offset.height + dragOffset.height
         
-        // FIX NEXT
+        isLoading = true
+        Task {
+            let newUrl = try await profileViewModel.uploadNewProfilePicture(image, ogImageUrl: profileViewModel.profImageUrl)
+            if let url = newUrl {
+                profileViewModel.profImageUrl = url
+                print("PROFILE IMAGE", profileViewModel.profImageUrl)
+                profileViewModel.saveParams(offsetX: offsetX/300, offsetY: offsetY/300, scale: totalScale)
+            }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                pickedImage = nil
+                showImageOverlay = false
+            }
+            hideTabBar = false
+            isLoading = false
+        }
+        print("✅ Cropped & transformed rectangular image saved.")
     }
 
 }

@@ -220,7 +220,7 @@ struct PostView: View {
                         ForEach(postViewModel.comments) { com in
                             HStack(alignment: .top) {
                                 HStack(alignment: .top){
-                                    profileImageClip(url: profileViewModel.profImageUrl, height: 20)
+                                    profileImageClip(url: profileViewModel.profImageUrl, height: 20, params: profileViewModel.profPicParams ?? ProfPicParams(offsetX: 0, offsetY: 0, scale: 1))
                                     VStack(alignment: .leading){
                                         HStack {
                                             Text(com.comment.authorName)
@@ -326,7 +326,7 @@ struct PostView: View {
         VStack(spacing: 0){
             Divider()
             HStack(alignment: .bottom){
-                profileImageClip(url: profileViewModel.profImageUrl, height: 20)
+                profileImageClip(url: profileViewModel.profImageUrl, height: 20, params: profileViewModel.profPicParams ?? ProfPicParams(offsetX: 0, offsetY: 0, scale: 1))
                 VStack {
                     if parentId != nil {
                         HStack {

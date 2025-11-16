@@ -54,8 +54,6 @@ class CoreDataManager {
                 print("Error saving item: \(error)")
             }
         }
-        
-        /// + add to firebase
     }
     
     func saveEvent(eventId: String) {
@@ -71,8 +69,6 @@ class CoreDataManager {
                 print("Error saving item: \(error)")
             }
         }
-        
-        /// + add to firebase
     }
     
     func deleteSaved(id: String) {
@@ -91,8 +87,5 @@ class CoreDataManager {
                 print("Error deleting item: \(error)")
             }
         }
-        
-        //// + delete from firebase
     }
-    
 }

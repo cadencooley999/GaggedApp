@@ -103,10 +103,13 @@ struct postImage: View {
 struct profileImageClip: View {
     let url: String
     let height: CGFloat
+    var params: ProfPicParams
     @State var isLoading: Bool = false
     @State var isFailed: Bool = false
     
     var body: some View {
+        let cropSize = height
+        let radius = cropSize / 2
         ZStack {
             KFImage(URL(string: url))
                 .onFailure { error in
@@ -126,10 +129,11 @@ struct profileImageClip: View {
                 }
                 .resizable()
                 .scaledToFill()
-                .frame(width: height, height: height)
+                .frame(width: cropSize, height: cropSize)
+                .scaleEffect(params.scale)
+                .offset(x: clampedOffset(value: params.offsetX*cropSize, cropSize: cropSize, radius: radius, scale: params.scale), y:  clampedOffset(value: params.offsetY*cropSize, cropSize: cropSize, radius: radius, scale: params.scale))
                 .clipShape(Circle())
                 .onAppear {
-                    
                 }
                 .overlay {
                     if isLoading || isFailed {
@@ -141,6 +145,12 @@ struct profileImageClip: View {
                     }
                 }
         }
+    }
+    
+    private func clampedOffset(value: CGFloat, cropSize: CGFloat, radius: CGFloat, scale: CGFloat) -> CGFloat {
+        let scaledRadius = radius * scale
+        let maxOffset = scaledRadius - radius
+        return max(-maxOffset, min(value, maxOffset))
     }
 }
 

@@ -22,6 +22,12 @@ enum MixedType: Identifiable, Hashable {
     }
 }
 
+struct ProfPicParams {
+    let offsetX: CGFloat
+    let offsetY: CGFloat
+    let scale: CGFloat
+}
+
 @MainActor
 final class ProfileViewModel: ObservableObject {
     
@@ -32,6 +38,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var hasLoadedPosts = false
     @Published var hasLoadedComments = false
     @Published var hasLoadedEvents = false
+    @Published var profPicParams: ProfPicParams? = nil
     @Published var post: PostModel? = nil
     @Published var userPosts: [PostModel] = []
     @Published var userComments: [CommentModel] = []
@@ -197,6 +204,21 @@ final class ProfileViewModel: ObservableObject {
             try await storageManager.deleteImage(imageUrl: ogImageUrl)
         }
         try await userManager.updateProfileImage(imageUrl: "", userId: userId)
+    }
+    
+    // Save
+    func saveParams(offsetX: CGFloat, offsetY: CGFloat, scale: CGFloat) {
+        let dict: [String: CGFloat] = ["offsetX": offsetX, "offsetY": offsetY, "scale": scale]
+        UserDefaults.standard.set(dict, forKey: "croppedProf")
+        getParams()
+    }
+
+    // Load
+    func getParams() {
+        guard let dict = UserDefaults.standard.dictionary(forKey: "croppedProf") as? [String: CGFloat] else {
+            return
+        }
+        profPicParams = ProfPicParams(offsetX: dict["offsetX"] ?? 0, offsetY: dict["offsetY"] ?? 0, scale: dict["scale"] ?? 1)
     }
     
     @MainActor
