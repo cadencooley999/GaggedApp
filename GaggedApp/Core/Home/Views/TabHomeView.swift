@@ -31,8 +31,8 @@ struct CustomTabBarView: View {
                             .frame(width: 24, height: 24)
                     }
                     .frame(maxWidth: 200)
-                    .padding(.top)
-                    .padding(.bottom, 32)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
                     .foregroundColor(selectedTab == tab ? Color.theme.black : Color.theme.gray)
                     .onTapGesture {
                         selectedTab = tab
@@ -43,10 +43,10 @@ struct CustomTabBarView: View {
                 Spacer()
             }
             .padding(.horizontal, 8)
-            .background(Color.theme.background.shadow(color: Color.black.opacity(0.05), radius: 10, y: -13))
+            .background(Color.theme.background.shadow(color: Color.black.opacity(0.05), radius: 10, y: -13).cornerRadius(30))
             VStack {
                 AddPostIcon()
-                    .frame(width: 44, height: 44)
+                    .frame(width: 36, height: 36)
                     .padding(.bottom)
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -57,7 +57,8 @@ struct CustomTabBarView: View {
             }
 
         }
-        
+        .padding(16)
+        .shadow(color: Color.theme.lightGray, radius: 5)
     }
 }
 

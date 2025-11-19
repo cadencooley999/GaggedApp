@@ -4,19 +4,13 @@
 //
 //  Created by Caden Cooley on 10/10/25.
 //
+import Foundation
+import SwiftUI
 
-struct CityModel: Identifiable, Codable {
-    let id: String
-    let name: String
-    let state: String
-    let country: String
-    let keywords: [String]
-    
-    init(id: String, name: String, state: String, country: String, keywords: [String]) {
-        self.id = id
-        self.name = name
-        self.state = state
-        self.country = country
-        self.keywords = keywords
-    }
+struct City: Codable, Identifiable {
+    let id = UUID()
+    let city: String
+    let state_id: String
+    let lat: Double
+    let lng: Double
 }

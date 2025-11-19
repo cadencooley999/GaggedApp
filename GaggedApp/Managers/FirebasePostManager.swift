@@ -33,7 +33,6 @@ class FirebasePostManager {
             "upvotes" : post.upvotes,
             "downvotes" : post.downvotes,
             "cityIds" : post.cityIds,
-            "cities" : try post.cities.map { try Firestore.Encoder().encode($0) },
             "keywords" : generateKeywords(title: post.text, name: post.name, authorName: post.authorName),
             "upvotesThisWeek" : post.upvotesThisWeek,
             "lastUpvoted" : post.lastUpvoted
@@ -202,19 +201,10 @@ class FirebasePostManager {
         let keywords = item["keywords"] as? [String] ?? []
         let cityIds = item["cityIds"] as? [String] ?? []
         let citiesData = item["cities"] as? [[String: Any]] ?? []
-        let cities: [CityLiteModel] = citiesData.compactMap { (dict) -> CityLiteModel? in
-            guard let id = dict["id"] as? String,
-                  let name = dict["name"] as? String,
-                  let state = dict["state"] as? String,
-                  let country = dict["country"] as? String else {
-                return nil
-            }
-            return CityLiteModel(id: id, name: name, state: state, country: country)
-        }
 
         print("mapping doc", id)
         
-        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, upvotes: upvotes, downvotes: downvotes, createdAt: createdAt, authorId: authorId, authorName: authorName, height: 180, cityIds: cityIds, cities: cities, keywords: keywords, upvotesThisWeek: upvotesThisWeek, lastUpvoted: lastUpvoted)
+        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, upvotes: upvotes, downvotes: downvotes, createdAt: createdAt, authorId: authorId, authorName: authorName, height: 180, cityIds: cityIds, keywords: keywords, upvotesThisWeek: upvotesThisWeek, lastUpvoted: lastUpvoted)
     }
     
     func upvotePost(post: PostModel) async throws {
@@ -301,7 +291,6 @@ class FirebasePostManager {
             createdAt: Timestamp(date: Date()),
             authorId: "Caden", authorName: "Caden134", height: 120,
             cityIds: ["NYC001"],
-            cities: [mockCities[0]],
             keywords: ["SwiftUI", "iOS", "Design"],
             upvotesThisWeek: 0,
             lastUpvoted: nil
@@ -318,7 +307,6 @@ class FirebasePostManager {
             authorName: "Caden134",
             height: 120,
             cityIds: ["SF002", "LA003"],
-            cities: [mockCities[1], mockCities[2]],
             keywords: ["Firebase", "Firestore", "Backend"],
             upvotesThisWeek: 0,
             lastUpvoted: nil
@@ -329,19 +317,3 @@ class FirebasePostManager {
 
 }
 
-extension FirebasePostManager {
-    static let mockCities: [CityLiteModel] = [
-        CityLiteModel(id: "NYC001", name: "New York", state: "New York", country: "USA"),
-        CityLiteModel(id: "SF002", name: "San Francisco", state: "California", country: "USA"),
-        CityLiteModel(id: "LA003", name: "Los Angeles", state: "California", country: "USA"),
-        CityLiteModel(id: "SEA004", name: "Seattle", state: "Washington", country: "USA"),
-        CityLiteModel(id: "DEN005", name: "Denver", state: "Colorado", country: "USA"),
-        CityLiteModel(id: "CHI006", name: "Chicago", state: "Illinois", country: "USA"),
-        CityLiteModel(id: "ATL007", name: "Atlanta", state: "Georgia", country: "USA"),
-        CityLiteModel(id: "MIA008", name: "Miami", state: "Florida", country: "USA"),
-        CityLiteModel(id: "DAL009", name: "Dallas", state: "Texas", country: "USA"),
-        CityLiteModel(id: "BOS010", name: "Boston", state: "Massachusetts", country: "USA")
-    ]
-
-
-}

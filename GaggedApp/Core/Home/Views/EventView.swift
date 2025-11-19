@@ -29,8 +29,6 @@ struct EventView: View {
     @State var highlightedCommentId: String? = nil
     @State var showOptionsSheet: Bool = false
     @State var selectedItemForOptions: GenericItem? = nil
-    
-    let cityUtil = CityUtility.shared
 
     var body: some View {
         ZStack {
@@ -136,12 +134,12 @@ struct EventView: View {
                 VStack {
                     Text(eventViewModel.event?.name ?? "Name")
                         .font(.title2)
-                    if let city = eventViewModel.event?.city {
-                        Text(city.name + ", " + (cityUtil.getStateAbbreviation(for: city.state) ?? ""))
-                            .italic(true)
-                            .font(.callout)
-                            .lineLimit(1)
-                    }
+//                    if let city = eventViewModel.event?.city {
+//                        Text(city.name + ", " + (cityUtil.getStateAbbreviation(for: city.state) ?? ""))
+//                            .italic(true)
+//                            .font(.callout)
+//                            .lineLimit(1)
+//                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 HStack {

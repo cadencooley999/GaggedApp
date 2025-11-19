@@ -11,7 +11,6 @@ import FirebaseFirestore
 struct EventModel: Identifiable, Codable, Hashable {
     var id: String
     let name: String
-    let city: CityLiteModel?
     let locationDetails: String
     let date: Date
     var rsvps: Int

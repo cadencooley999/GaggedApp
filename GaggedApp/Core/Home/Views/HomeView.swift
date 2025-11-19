@@ -11,6 +11,7 @@ struct HomeView: View {
     
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var postViewModel: PostViewModel
+    @EnvironmentObject var locationManager: LocationManager
     
     @Binding var hideTabBar: Bool
     @Binding var showPostView: Bool
@@ -26,6 +27,10 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             Color.theme.background.ignoresSafeArea()
+            Image("AppImage")
+                .resizable()
+                .frame(width: 300)
+                .frame(height: 300)
             VStack(spacing: 0) {
                 ScrollView(showsIndicators: true) {
                     VStack(spacing: 0) {
@@ -75,11 +80,13 @@ struct HomeView: View {
                 .ignoresSafeArea()
             }
             VStack(spacing: 0) {
-                header
-                    .frame(height: 55)
-                    .background(Color.theme.background)
-                    .opacity(blurHeader ? 0.9 : 1)
-                Divider()
+                VStack(spacing: 0){
+                    header
+                        .frame(height: 55)
+                        .opacity(blurHeader ? 0.7 : 1)
+                    Divider()
+                }
+                .background(Color.theme.background.opacity(blurHeader ? 0.7 : 1))
                 Spacer()
             }
         }
@@ -98,45 +105,69 @@ struct HomeView: View {
         )
         .task {
             Task {
+                locationManager.requestLocation()
                 try await homeViewModel.fetchPostsIfNeeded()
             }
         }
     }
+    
     var header: some View {
-        VStack(spacing: 0){
+        HStack(spacing: 16) {
+        // Left: App name only (Logo removed as requested)
+            Text("Gagged")
+                .font(.title2.bold())
+                .foregroundColor(Color.theme.darkBlue)
+            
+            Spacer()
+            
             HStack(spacing: 0){
-                Image(systemName: "sharedwithyou")
-                    .font(.title2)
-                Text("Gagged")
-                    .font(.title)
-                    .padding(.horizontal, 8)
-                HStack {
-                    Text("San Marcos")
-                        .font(.subheadline)
-                    Image(systemName: "mappin")
-                        .foregroundStyle(Color.theme.darkBlue)
+                Text(locationManager.cityName ?? "Unknown")
+                    .font(.headline)
+                    .foregroundColor(Color.theme.darkBlue)
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.theme.lightBlue.opacity(0.2))
+                    )
+                    .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
+                
+                Button(action: {
+                    locationManager.requestLocation()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.subheadline.bold())
+                        .foregroundColor(Color.theme.darkBlue)
+                        .padding(8) // Gives a good tap target size
                 }
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 40)
-                        .fill(Color.clear)
-                        .stroke(Color.theme.darkBlue, lineWidth: 1)
-                )
-                .padding(.horizontal)
-                Spacer()
-                Image(systemName: "magnifyingglass")
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            hideTabBar = true
-                            showSearchView = true
-                            
-                        }
-                    }
+                .buttonStyle(PlainButtonStyle())
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .center)
+            
+            Spacer()
+            
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                     hideTabBar = true
+                     showSearchView = true
+                }
+            }) {
+                Image(systemName: "magnifyingglass")
+                    .font(.title2)
+                    .foregroundColor(Color.theme.darkBlue)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.theme.darkBlue.opacity(0.7), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(PlainButtonStyle())
         }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
     }
+
     
     var postSection: some View {
         HStack {

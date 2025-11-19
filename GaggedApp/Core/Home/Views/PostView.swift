@@ -31,8 +31,6 @@ struct PostView: View {
     @State var highlightedCommentId: String? = nil
     @State var showOptionsSheet: Bool = false
     @State var selectedItemForOptions: GenericItem? = nil
-    
-    let cityUtil = CityUtility.shared
 
     var body: some View {
         ZStack {
@@ -171,16 +169,16 @@ struct PostView: View {
                 VStack {
                     Text(postViewModel.post?.name ?? "Name")
                         .font(.title2)
-                    if let cities = postViewModel.post?.cities {
-                        HStack {
-                            ForEach(cities) { city in
-                                Text(city.name + ", " + (cityUtil.getStateAbbreviation(for: city.state) ?? ""))
-                                    .italic(true)
-                                    .font(.callout)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
+//                    if let cities = postViewModel.post?.cities {
+//                        HStack {
+//                            ForEach(cities) { city in
+//                                Text(city.name + ", " + (cityUtil.getStateAbbreviation(for: city.state) ?? ""))
+//                                    .italic(true)
+//                                    .font(.callout)
+//                                    .lineLimit(1)
+//                            }
+//                        }
+//                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 HStack {

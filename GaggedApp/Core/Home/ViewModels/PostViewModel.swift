@@ -286,7 +286,7 @@ final class PostViewModel: ObservableObject {
 extension PostViewModel {
     static func previewModel() -> PostViewModel {
         let vm = PostViewModel()
-        let fakepost = PostModel(id: "12341234", text: "Camping Night was super fun but he had no hair and his baldness was frightening and he didn't care and he kept talking about meese and Canada and maple syrup. He is a player I think",          name: "David G",      imageUrl: "Moose", upvotes: 20, downvotes: 0,  createdAt: Timestamp(date: Date().addingTimeInterval(-29000)), authorId: "Caden", authorName: "Caden1123", height: 120, cityIds: ["NYC001"], cities: [CityLiteModel(id: "NYC001", name: "New York", state: "New York", country: "USA")], keywords: [], upvotesThisWeek: 0, lastUpvoted: nil)
+        let fakepost = PostModel(id: "12341234", text: "Camping Night was super fun but he had no hair and his baldness was frightening and he didn't care and he kept talking about meese and Canada and maple syrup. He is a player I think",          name: "David G",      imageUrl: "Moose", upvotes: 20, downvotes: 0,  createdAt: Timestamp(date: Date().addingTimeInterval(-29000)), authorId: "Caden", authorName: "Caden1123", height: 120, cityIds: ["NYC001"], keywords: [], upvotesThisWeek: 0, lastUpvoted: nil)
         vm.post = fakepost
         return vm
     }

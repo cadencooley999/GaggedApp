@@ -18,11 +18,13 @@
 		C0894DE32E90308400B33A4C /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DE22E90308400B33A4C /* FirebaseFirestore */; };
 		C0894DED2E92DAC700B33A4C /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DEC2E92DAC700B33A4C /* FirebaseStorage */; };
 		C0894DEF2E92DAC700B33A4C /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = C0894DEE2E92DAC700B33A4C /* FirebaseStorageCombine-Community */; };
+		C0CC6AFF2ECD6C4300C37A29 /* us_cities_filtered.json in Resources */ = {isa = PBXBuildFile; fileRef = C0CC6AFE2ECD6C4300C37A29 /* us_cities_filtered.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		C0894DAD2E8EB41700B33A4C /* GaggedApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GaggedApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0894DB02E8EB41700B33A4C /* GaggedAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaggedAppApp.swift; sourceTree = "<group>"; };
+		C0CC6AFE2ECD6C4300C37A29 /* us_cities_filtered.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = us_cities_filtered.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,6 +59,7 @@
 		C0894DA42E8EB41700B33A4C = {
 			isa = PBXGroup;
 			children = (
+				C0CC6AFE2ECD6C4300C37A29 /* us_cities_filtered.json */,
 				C0894DB02E8EB41700B33A4C /* GaggedAppApp.swift */,
 				C0894DAF2E8EB41700B33A4C /* GaggedApp */,
 				C0894DAE2E8EB41700B33A4C /* Products */,
@@ -151,6 +154,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0CC6AFF2ECD6C4300C37A29 /* us_cities_filtered.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -299,6 +303,7 @@
 				DEVELOPMENT_TEAM = K99D4N2343;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location used to display posts";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -327,6 +332,7 @@
 				DEVELOPMENT_TEAM = K99D4N2343;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location used to display posts";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -23,6 +23,7 @@ struct AuthDataResultModel {
 
 class UserManager {
     
+    @AppStorage("userEmail") var userEmail = ""
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
     @AppStorage("profImageUrl") var profImageUrl = ""
@@ -53,9 +54,45 @@ class UserManager {
             "createdAt": Timestamp(date: Date())
         ]
         try await usersCollection.document(user.uid).setData(userData, merge: false)
+        userEmail = user.email
         userId = user.uid
         username = usernm
         profImageUrl = imageUrl
+    }
+    
+    func logInUser(email: String, password: String) async throws -> AuthDataResultModel {
+        let authresult = try await Auth.auth().signIn(withEmail: email, password: password)
+        return AuthDataResultModel(user: authresult.user)
+    }
+    
+    func signOutUser() async throws {
+        do {
+            try Auth.auth().signOut()
+            print("User signed out successfully")
+        } catch let signOutError as NSError {
+            print("Error signing out: %@", signOutError)
+        }
+    }
+    
+    func reauthAndDelete(email: String, password: String) async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(domain: "AuthManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user signed in"])
+        }
+
+        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+
+        // Reauthenticate
+        _ = try await user.reauthenticate(with: credential)
+
+        // Delete user
+        try await user.delete()
+
+        // Optional: clean up Firestore
+        try await cleanupUserData(userId: user.uid)
+    }
+    
+    func cleanupUserData(userId: String) async throws {
+        try await usersCollection.document(userId).delete()
     }
     
     func loadUserInfo(userId: String) async throws -> UserModel {

@@ -19,7 +19,6 @@ struct PostModel: Identifiable, Codable, Hashable {
     var height: CGFloat
     let authorId: String
     let authorName: String
-    let cities: [CityLiteModel]
     let cityIds: [String]
     var keywords: [String]
     var upvotesThisWeek: Int
@@ -33,7 +32,7 @@ struct PostModel: Identifiable, Codable, Hashable {
         return lhs.id == rhs.id
     }
     
-    init(id: String, text: String, name: String, imageUrl: String, upvotes: Int, downvotes: Int, createdAt: Timestamp, authorId: String, authorName: String, height: CGFloat, cityIds: [String], cities: [CityLiteModel], keywords: [String], upvotesThisWeek: Int, lastUpvoted: Timestamp?) {
+    init(id: String, text: String, name: String, imageUrl: String, upvotes: Int, downvotes: Int, createdAt: Timestamp, authorId: String, authorName: String, height: CGFloat, cityIds: [String], keywords: [String], upvotesThisWeek: Int, lastUpvoted: Timestamp?) {
         self.id = id
         self.text = text
         self.name = name
@@ -44,7 +43,6 @@ struct PostModel: Identifiable, Codable, Hashable {
         self.height = height
         self.authorId = authorId
         self.authorName = authorName
-        self.cities = cities
         self.cityIds = cityIds
         self.keywords = keywords
         self.upvotesThisWeek = upvotesThisWeek

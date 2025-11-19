@@ -14,6 +14,7 @@ import FirebaseFirestore
 final class OnboardingViewModel: ObservableObject {
     
     @AppStorage("hasOnboarded") var hasOnboarded: Bool = false
+    @AppStorage("isLoggedIn") var isLoggedIn: Bool = false
     
     @Published var pickedImage: UIImage? = nil
     @Published var imageSelection: PhotosPickerItem? = nil {
@@ -58,6 +59,7 @@ final class OnboardingViewModel: ObservableObject {
             let newUser = try await UserManager.shared.signUpUser(email: email, password: password)
             try await UserManager.shared.createUser(user: newUser, usernm: username, imageUrl: imageUrl)
             hasOnboarded = true
+            isLoggedIn = true
         }
         catch  {
             print("error with user creation: \(error)")

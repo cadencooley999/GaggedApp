@@ -32,8 +32,6 @@ struct AddPostView: View {
     @State var eventDate: Date = Date()
     @State var locationDetailsText: String = ""
     
-    let cityUtil = CityUtility.shared
-    
     var body: some View {
         ZStack {
             Color.theme.background
@@ -255,7 +253,7 @@ struct AddPostView: View {
                     HStack(spacing: 0){
                         Text(city.name)
                             .italic()
-                        Text(", " + (cityUtil.getStateAbbreviation(for: city.state) ?? ""))
+                        Text(", " )
                             .padding(.trailing)
                         Image(systemName: "xmark")
                             .font(.subheadline)

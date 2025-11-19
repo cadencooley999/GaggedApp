@@ -20,7 +20,7 @@ class HomeViewModel: ObservableObject {
     let storageManager = StorageManager.shared
     let postManager = FirebasePostManager.shared
     
-    let heights: [CGFloat] = [220, 180, 280]
+    let heights: [CGFloat] = [240, 200, 300]
     
     func fetchPostsIfNeeded() async throws {
         guard !hasLoaded else {return}

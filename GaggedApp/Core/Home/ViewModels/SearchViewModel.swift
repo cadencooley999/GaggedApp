@@ -12,6 +12,9 @@ import Combine
 @MainActor
 final class SearchViewModel: ObservableObject {
     
+    @AppStorage("hasOnboarded") var hasOnboarded = false
+    @AppStorage("isLoggedIn") var isLoggedIn = false
+    
     @Published var searchText: String = ""
     @Published var eventSearchText: String = ""
     @Published var postMatrix: [[PostModel]] = []
@@ -25,6 +28,7 @@ final class SearchViewModel: ObservableObject {
 
     init() {
         addSubscribers()
+        print("subs added")
     }
 
     let heights: [CGFloat] = [220]
@@ -33,7 +37,7 @@ final class SearchViewModel: ObservableObject {
         $searchText
             .debounce(for: 0.5, scheduler: DispatchQueue.main)
             .sink { _ in
-                if self.searchText == "" {
+                if self.searchText == "" && self.hasOnboarded && self.isLoggedIn {
                     Task {
                         try await self.fetchPosts()
                     }
@@ -46,7 +50,7 @@ final class SearchViewModel: ObservableObject {
         $eventSearchText
             .debounce(for: 0.5, scheduler: DispatchQueue.main)
             .sink { _ in
-                if self.eventSearchText == "" {
+                if self.eventSearchText == "" && self.hasOnboarded && self.isLoggedIn {
                     Task {
                         try await self.fetchEvents()
                     }

@@ -26,6 +26,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct GaggedAppApp: App {
     
     @AppStorage("hasOnboarded") var hasOnboarded = false
+    @AppStorage("isLoggedIn") var isLoggedIn = false
     @StateObject var homeViewModel = HomeViewModel()
     @StateObject var addPostViewModel = AddPostViewModel()
     @StateObject var profileViewModel = ProfileViewModel()
@@ -35,21 +36,32 @@ struct GaggedAppApp: App {
     @StateObject var eventViewModel = EventViewModel()
     @StateObject var leaderViewModel = LeaderViewModel()
     @StateObject var onBoardingViewModel = OnboardingViewModel()
+    @StateObject var settingsViewModel = SettingsViewModel()
+    @StateObject var loginViewModel = LoginViewModel()
+    @StateObject var locationManager = LocationManager()
     
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
     var body: some Scene {
         WindowGroup {
             if hasOnboarded {
-                TabHomeView()
-                    .environmentObject(homeViewModel)
-                    .environmentObject(addPostViewModel)
-                    .environmentObject(profileViewModel)
-                    .environmentObject(searchViewModel)
-                    .environmentObject(postViewModel)
-                    .environmentObject(eventsViewModel)
-                    .environmentObject(eventViewModel)
-                    .environmentObject(leaderViewModel)
+                if isLoggedIn {
+                    TabHomeView()
+                        .environmentObject(homeViewModel)
+                        .environmentObject(addPostViewModel)
+                        .environmentObject(profileViewModel)
+                        .environmentObject(searchViewModel)
+                        .environmentObject(postViewModel)
+                        .environmentObject(eventsViewModel)
+                        .environmentObject(eventViewModel)
+                        .environmentObject(leaderViewModel)
+                        .environmentObject(settingsViewModel)
+                        .environmentObject(locationManager)
+                }
+                else {
+                    LoginView()
+                        .environmentObject(loginViewModel)
+                }
             }
             else {
                 OnboardingView()

@@ -124,21 +124,10 @@ class EventManager {
         let authorId = doc["authorId"] as? String ?? ""
         let authorName = doc["authorName"] as? String ?? ""
         let keywords = doc["keywords"] as? [String] ?? []
-        let cityData = doc["city"] as? [String: Any] ?? [:]
         let cityId = doc["cityId"] as? String ?? ""
-        let city: CityLiteModel? = {
-            guard let id = cityData["id"] as? String,
-                  let name = cityData["name"] as? String,
-                  let state = cityData["state"] as? String,
-                  let country = cityData["country"] as? String else {
-                return nil
-            }
-            print("Made it thru city gaurd")
-            return CityLiteModel(id: id, name: name, state: state, country: country)
-        }()
 
         
-        return EventModel(id: id, name: name, city: city, locationDetails: locationDetails, date: date, rsvps: rsvps, imageUrl: imageUrl, description: description, authorId: authorId, authorName: authorName, cityId: cityId, keywords: keywords)
+        return EventModel(id: id, name: name, locationDetails: locationDetails, date: date, rsvps: rsvps, imageUrl: imageUrl, description: description, authorId: authorId, authorName: authorName, cityId: cityId, keywords: keywords)
     }
     
     func generateKeywords(name: String, authorName: String) -> [String] {

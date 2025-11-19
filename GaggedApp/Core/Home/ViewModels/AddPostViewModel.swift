@@ -24,9 +24,9 @@ final class AddPostViewModel: ObservableObject {
             setImage(selection: imageSelection)
         }
     }
-    @Published var citiesFound: [CityModel] = []
+    @Published var citiesFound: [String] = []
     @Published var searchText: String = ""
-    @Published var selectedCities: [CityLiteModel] = []
+    @Published var selectedCities: [String] = []
     
     let storageManager = StorageManager.shared
     let postManager = FirebasePostManager.shared
@@ -57,14 +57,14 @@ final class AddPostViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func uploadNewPost(text: String, name: String, image: UIImage, cities: [CityLiteModel], cityIds: [String]) async throws -> Bool {
+    func uploadNewPost(text: String, name: String, image: UIImage, cityIds: [String]) async throws -> Bool {
         do {
             let authorId = userId
             let imageId = UUID().uuidString
             
             let imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
             
-            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, upvotes: 0, downvotes: 0, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, height: 120, cityIds: cityIds, cities: cities, keywords: [], upvotesThisWeek: 0, lastUpvoted: nil)
+            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, upvotes: 0, downvotes: 0, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, height: 120, cityIds: cityIds, keywords: [], upvotesThisWeek: 0, lastUpvoted: nil)
             try await postManager.uploadPost(post: post)
             print("✅ Success")
             return true
@@ -74,14 +74,14 @@ final class AddPostViewModel: ObservableObject {
         }
     }
     
-    func uploadNewEvent(description: String, name: String, image: UIImage?, rsvps: Int, city: CityLiteModel, cityId: String, locationDetails: String, date: Date) async throws -> Bool {
+    func uploadNewEvent(description: String, name: String, image: UIImage?, rsvps: Int, cityId: String, locationDetails: String, date: Date) async throws -> Bool {
         do {
             var imageUrl = ""
             var imageId = UUID().uuidString
             if let image = image {
                 imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
             }
-            let event = EventModel(id: "", name: name, city: city, locationDetails: locationDetails, date: date, rsvps: rsvps, imageUrl: imageUrl, description: description, authorId: userId, authorName: username, cityId: cityId, keywords: [])
+            let event = EventModel(id: "", name: name, locationDetails: locationDetails, date: date, rsvps: rsvps, imageUrl: imageUrl, description: description, authorId: userId, authorName: username, cityId: cityId, keywords: [])
             try await eventManager.uploadEvent(event: event)
             print("Success uploading event")
             return true
@@ -106,13 +106,13 @@ final class AddPostViewModel: ObservableObject {
     
     func searchCities(keyword: String) {
         Task {
-            citiesFound = try await cityManager.getCitiesFromSearch(keyword: keyword)
+
         }
     }
     
     func fetchAllCities() {
         Task {
-            citiesFound = try await cityManager.getAllCities()
+
         }
     }
 }
