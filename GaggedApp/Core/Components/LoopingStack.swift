@@ -52,6 +52,7 @@ fileprivate struct LoopingStackCardView<Content: View>: View {
         let rotation = max(min(-offset / viewSize.width, 1), 0) * rotationDegree
         
         content
+            .background(Color.theme.background)
             .onGeometryChange(for: CGSize.self, of: {
                 $0.size
             }, action: {

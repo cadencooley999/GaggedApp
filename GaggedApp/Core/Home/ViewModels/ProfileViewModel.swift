@@ -10,18 +10,6 @@ import SwiftUI
 import FirebaseFirestore
 import Combine
 
-enum MixedType: Identifiable, Hashable {
-    case post(PostModel)
-    case event(EventModel)
-    
-    var id: String {
-        switch self {
-        case .post(let post): return "post-\(post.id)"
-        case .event(let event): return "event-\(event.id)"
-        }
-    }
-}
-
 struct ProfPicParams {
     let offsetX: CGFloat
     let offsetY: CGFloat
@@ -43,12 +31,13 @@ final class ProfileViewModel: ObservableObject {
     @Published var userPosts: [PostModel] = []
     @Published var userComments: [CommentModel] = []
     @Published var userEvents: [EventModel] = []
+    @Published var upvotedPosts: [PostModel] = []
     @Published var sectionLoading: String = ""
     @Published var savedPosts: [PostModel] = []
     @Published var savedEvents: [EventModel] = []
     @Published var searchText: String = ""
     @Published var searchResults: [MixedType] = []
-    @Published var loadedUser: UserModel = UserModel(id: "", username: "", garma: 0, imageUrl: "", createdAt: Timestamp(date: Date()), keywords: [])
+    @Published var loadedUser: UserModel = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), keywords: [])
     
     let postManager = FirebasePostManager.shared
     let commentsManager = CommentsManager.shared
@@ -108,11 +97,15 @@ final class ProfileViewModel: ObservableObject {
         }
     }
     
+    func setNewProfileImage(address: String) async throws {
+        try await userManager.setNewProfileImage(address: address)
+    }
+    
     func loadUserInfo() async throws {
         Task {
-            let user = try await userManager.loadUserInfo(userId: userId)
+            let user = try await userManager.fetchUser(userId: userId)
             loadedUser = user
-            print("IMAGE URL", user.imageUrl)
+            print("IMAGE URL", user.imageAddress)
         }
     }
     
@@ -176,49 +169,20 @@ final class ProfileViewModel: ObservableObject {
         userEvents = events
     }
     
+    func getMoreUpvotedPosts() {
+        Task {
+            sectionLoading = "upvoted"
+            let posts = try await postManager.getUpvotedPostFromCoreData()
+            upvotedPosts = posts
+            sectionLoading = ""
+        }
+    }
+    
     func formatFirestoreDate(_ timestamp: Timestamp) -> String {
         let date = timestamp.dateValue()
         let formatter = DateFormatter()
         formatter.dateFormat = "M/d/yy"
         return formatter.string(from: date)
-    }
-    
-    func uploadNewProfilePicture(_ image: UIImage, ogImageUrl: String) async throws -> String? {
-        do {
-            let imageId = UUID().uuidString
-            print(ogImageUrl)
-            if ogImageUrl != "" {
-                try await storageManager.deleteImage(imageUrl: ogImageUrl)
-            }
-            let imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
-            try await userManager.updateProfileImage(imageUrl: imageUrl, userId: userId)
-            return imageUrl
-        } catch {
-            print("❌ Failed with error: \(error.localizedDescription)")
-            return nil
-        }
-    }
-    
-    func deleteProfilePic(ogImageUrl: String) async throws {
-        if ogImageUrl != "" {
-            try await storageManager.deleteImage(imageUrl: ogImageUrl)
-        }
-        try await userManager.updateProfileImage(imageUrl: "", userId: userId)
-    }
-    
-    // Save
-    func saveParams(offsetX: CGFloat, offsetY: CGFloat, scale: CGFloat) {
-        let dict: [String: CGFloat] = ["offsetX": offsetX, "offsetY": offsetY, "scale": scale]
-        UserDefaults.standard.set(dict, forKey: "croppedProf")
-        getParams()
-    }
-
-    // Load
-    func getParams() {
-        guard let dict = UserDefaults.standard.dictionary(forKey: "croppedProf") as? [String: CGFloat] else {
-            return
-        }
-        profPicParams = ProfPicParams(offsetX: dict["offsetX"] ?? 0, offsetY: dict["offsetY"] ?? 0, scale: dict["scale"] ?? 1)
     }
     
     @MainActor

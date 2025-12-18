@@ -27,15 +27,12 @@ class FirebasePostManager {
             "text": post.text,
             "imageUrl": post.imageUrl,
             "authorId": post.authorId,
-            "authorName" : post.authorName,
             "name" : post.name,
             "createdAt" : post.createdAt,
-            "upvotes" : post.upvotes,
-            "downvotes" : post.downvotes,
             "cityIds" : post.cityIds,
-            "keywords" : generateKeywords(title: post.text, name: post.name, authorName: post.authorName),
-            "upvotesThisWeek" : post.upvotesThisWeek,
-            "lastUpvoted" : post.lastUpvoted
+            "keywords" : generateKeywords(title: post.text, name: post.name),
+            "upvotes" : post.upvotes,
+            "downvotes" : post.downvotes
         ])
     }
     
@@ -44,24 +41,37 @@ class FirebasePostManager {
         try await postRef.delete()
     }
     
-    func getPosts() async throws -> [PostModel] {
+    func getPosts(from cityIDs: [String]) async throws -> [PostModel] {
         
-        var posts: [PostModel] = []
+        // Break into batches of 10 per Firestore rule
+        let batches = cityIDs.chunked(into: 10)
         
-        let query: Query = postsCollection.limit(to: 20)
-        let newDocs = try await query.getDocuments()
-                                        
-        for i in newDocs.documents {
-              let post = await mapItem(item: i)
-              posts.append(post)
-          }
+        var allPosts: [PostModel] = []
+        var seen: Set<String> = []   // Avoid duplicate posts
         
-        return posts
+        for batch in batches {
+            let query = postsCollection
+                .whereField("cityIds", arrayContainsAny: batch)
+                .limit(to: 20)
+            
+            let snapshot = try await query.getDocuments()
+            
+            for doc in snapshot.documents {
+                let post = mapItem(item: doc)
+                
+                // Avoid duplicates if multiple batches matched it
+                if seen.insert(post.id).inserted {
+                    allPosts.append(post)
+                }
+            }
+        }
+        
+        return allPosts
     }
-    
+
     func getPost(id: String) async throws -> PostModel {
         let doc = try await postsCollection.document(id).getDocument()
-        return await mapItem(item: doc)
+        return mapItem(item: doc)
     }
     
     func getUserPosts(uid: String) async throws -> [PostModel] {
@@ -80,158 +90,209 @@ class FirebasePostManager {
         
     }
     
-    func getPostsFromSearch(keyword: String) async throws -> [PostModel] {
-        
-        var posts: [PostModel] = []
-        var newkeyword = keyword
-        
-        if keyword.contains(" ") {
-            newkeyword = newkeyword.replacingOccurrences(of: " ", with: "")
+    func upvotePost(postId: String) async throws {
+        try await postsCollection.document(postId).updateData(["upvotes": FieldValue.increment(Int64(1))])
+    }
+    
+    func removeUpvote(postId: String) async throws {
+        try await postsCollection.document(postId).updateData(["upvotes": FieldValue.increment(Int64(-1))])
+    }
+    
+    func downvotePost(postId: String) async throws {
+        try await postsCollection.document(postId).updateData(["downvotes": FieldValue.increment(Int64(1))])
+    }
+    
+    func removeDownvote(postId: String) async throws {
+        try await postsCollection.document(postId).updateData(["downvotes": FieldValue.increment(Int64(-1))])
+    }
+    
+    func getAllPostsNearby(cities: [String]) async throws -> [PostModel] {
+        var results: [PostModel] = []
+        var seen: Set<String> = []
+
+        let chunks = cities.chunked(into: 10)
+
+        for chunk in chunks {
+            let query = postsCollection
+                .whereField("cityIds", arrayContainsAny: chunk)
+
+            let snapshot = try await query.getDocuments()
+            for doc in snapshot.documents {
+                let post = mapItem(item: doc)
+                if seen.insert(post.id).inserted {
+                    results.append(post)
+                }
+            }
         }
-        
-        do {
-            let querySnapshot = try await postsCollection.whereField("keywords", arrayContains: keyword.lowercased()).limit(to: 30).getDocuments()
-              for document in querySnapshot.documents {
-                  let newitem = await mapItem(item: document)
-                  posts.append(newitem)
-              }
-        } catch {
-          print("Error getting documents: \(error)")
+        return results
+    }
+    
+    func getPostsFromSearch(keyword: String, allPostsNearby: [PostModel]) async throws -> [PostModel] {
+
+        return allPostsNearby.filter { post in
+            let lower = keyword.lowercased()
+            
+            // 1. Match post name
+            if post.name.lowercased().contains(lower) { return true }
+            
+            // 3. Match city names
+            let cities = CityManager.shared.getCities(ids: post.cityIds)
+            if cities.contains(where: { $0.city.lowercased().contains(lower) }) {
+                return true
+            }
+            
+            return false
         }
-        
-        return posts
     }
     
     func getPostsFromIds(ids: [String]) async throws -> [PostModel] {
         var posts: [PostModel] = []
         for id in ids {
             let doc = try await postsCollection.document(id).getDocument()
-            let newitem = await mapItem(item: doc)
+            let newitem = mapItem(item: doc)
             posts.append(newitem)
         }
         return posts
     }
 
-    func getTopUpsThisWeek() async throws -> [PostModel] {
-        var posts: [PostModel] = []
+    func getTopUpsThisWeek(from cityIDs: [String]) async throws -> [PostModel] {
+        let week = weekId()
         
-        // Use a fixed calendar + UTC timezone for consistency with Firestore
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)! // 🔥 force UTC
+        print("IN manager func")
+        
+        //        let snapshot = try await Firestore.firestore()
+        //            .collection("WeeklyPostStats")
+        //            .whereField("week", isEqualTo: week)
+        //            .whereField("cityIds", arrayContainsAny: Array(cityIDs.prefix(10)))
+        //            .order(by: "upvotes", descending: true)
+        //            .limit(to: 5)
+        //            .getDocuments()
+        //
+        //        let postIds = snapshot.documents.map { $0["postId"] as! String }
+        
+        let chunks = cityIDs.chunked(into: 10)
+        
+        var stats: [WeeklyPostStat] = []
+        
+        for chunk in chunks {
+            let snap = try await Firestore.firestore()
+                .collection("WeeklyPostStats")
+                .whereField("week", isEqualTo: week)
+                .whereField("cityIds", arrayContainsAny: chunk)
+                .order(by: "upvotes", descending: true)
+                .limit(to: 5)
+                .getDocuments()
+            
+            stats.append(contentsOf: snap.documents.compactMap { WeeklyPostStat(doc: $0) })
+        }
+        
+        let top5 = stats
+            .reduce(into: [String: WeeklyPostStat]()) { dict, stat in
+                dict[stat.postId] = max(dict[stat.postId] ?? stat, stat)
+            }
+            .values
+            .sorted { $0.upvotes > $1.upvotes }
+            .prefix(5)
+        
+        let postIds = top5.filter({$0.upvotes > 0}).compactMap({$0.postId})
+        
+        print("GOT WEEKLY UPS", postIds)
 
-        let now = Date()
-        
-        // Compute Sunday 12:00 AM UTC
-        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
-        guard let startOfWeek = calendar.date(from: components),
-              let endOfWeek = calendar.date(byAdding: .day, value: 7, to: startOfWeek)
-        else {
-            throw NSError(domain: "DateError", code: 0)
-        }
-        
-        // Convert to Firestore Timestamps
-        let startTimestamp = Timestamp(date: startOfWeek)
-        let endTimestamp = Timestamp(date: endOfWeek)
-        
-        print("Start of week (UTC): \(startOfWeek)")
-        print("End of week (UTC): \(endOfWeek)")
-        
-        // ✅ Fixed field name and consistent range
-        let query = postsCollection
-            .whereField("lastUpvoted", isGreaterThanOrEqualTo: startTimestamp)
-            .whereField("lastUpvoted", isLessThan: endTimestamp)
-            .order(by: "upvotesThisWeek", descending: true)
-            .limit(to: 5)
-        
-        let snapshot = try await query.getDocuments()
-        
-        for doc in snapshot.documents {
-            var post = await mapItem(item: doc)
-            post.height = 320
-            posts.append(post)
-            print("✅ Fetched post \(post.id)")
-        }
-        
-        return posts
+        return try await getPostsFromIds(ids: postIds)
     }
     
-    func getTopUpsAllTime() async throws -> [PostModel] {
-        var posts: [PostModel] = []
-        
-        let query: Query = postsCollection.order(by: "upvotes", descending: true).limit(to: 5)
-        let newDocs = try await query.getDocuments()
-        
-        for i in newDocs.documents {
-            var post = await mapItem(item: i)
-            post.height = 320
-            posts.append(post)
+    func getTopUpsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
+        let chunks = cityIDs.chunked(into: 10)
+
+        var postMap: [String: PostModel] = [:]
+
+        for chunk in chunks {
+            let snap = try await postsCollection
+                .whereField("cityIds", arrayContainsAny: chunk)
+                .order(by: "upvotes", descending: true)
+                .limit(to: 20) // IMPORTANT: over-fetch
+                .getDocuments()
+
+            for doc in snap.documents {
+                let post = mapItem(item: doc)
+
+                // Deduplicate + keep highest-upvote version
+                if let existing = postMap[post.id] {
+                    if post.upvotes > existing.upvotes {
+                        postMap[post.id] = post
+                    }
+                } else {
+                    postMap[post.id] = post
+                }
+            }
         }
-        
-        return posts
+
+        return postMap.values.filter({$0.upvotes > 0})
+            .sorted { $0.upvotes > $1.upvotes }
+            .prefix(5)
+            .map { $0 }
     }
+
   
-    func getTopDownsAllTime() async throws -> [PostModel] {
-        var posts: [PostModel] = []
-        
-        let query: Query = postsCollection.order(by: "downvotes", descending: true).limit(to: 5)
-        let newDocs = try await query.getDocuments()
-        
-        for i in newDocs.documents {
-            var post = await mapItem(item: i)
-            post.height = 320
-            posts.append(post)
+    func getTopDownsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
+        let chunks = cityIDs.chunked(into: 10)
+
+        var postMap: [String: PostModel] = [:]
+
+        for chunk in chunks {
+            let snap = try await postsCollection
+                .whereField("cityIds", arrayContainsAny: chunk)
+                .order(by: "downvotes", descending: true)
+                .limit(to: 20) // IMPORTANT: over-fetch
+                .getDocuments()
+
+            for doc in snap.documents {
+                let post = mapItem(item: doc)
+
+                // Deduplicate + keep highest-upvote version
+                if let existing = postMap[post.id] {
+                    if post.upvotes > existing.upvotes {
+                        postMap[post.id] = post
+                    }
+                } else {
+                    postMap[post.id] = post
+                }
+            }
         }
-        
+
+        return postMap.values.filter({$0.downvotes > 0})
+            .sorted { $0.upvotes > $1.upvotes }
+            .prefix(5)
+            .map { $0 }
+    }
+    
+    func getUpvotedPostFromCoreData() async throws -> [PostModel] {
+        let votedposts = CoreDataManager.shared.getUpvotedPosts()
+        let posts = try await getPostsFromIds(ids: votedposts.compactMap({$0.id}))
         return posts
     }
         
 
-    private func mapItem(item: DocumentSnapshot) async -> PostModel {
+    private func mapItem(item: DocumentSnapshot) -> PostModel {
         let id = item["id"] as? String ?? ""
         let text = item["text"] as? String ?? "Untitled"
         let name = item["name"] as? String ?? "Anonymous"
         let imageUrl = item["imageUrl"] as? String ?? ""
         let createdAt = item["createdAt"] as? Timestamp ?? Timestamp(date: Date())
-        let upvotes = item["upvotes"] as? Int ?? 0
-        let upvotesThisWeek = item["upvotesThisWeek"] as? Int ?? 0
-        let lastUpvoted = item["lastUpvoted"] as? Timestamp ?? nil
-        let downvotes = item["downvotes"] as? Int ?? 0
         let authorId = item["authorId"] as? String ?? ""
-        let authorName = item["authorName"] as? String ?? ""
         let keywords = item["keywords"] as? [String] ?? []
         let cityIds = item["cityIds"] as? [String] ?? []
         let citiesData = item["cities"] as? [[String: Any]] ?? []
+        let upvotes = item["upvotes"] as? Int ?? 0
+        let downvotes = item["downvotes"] as? Int ?? 0
 
         print("mapping doc", id)
         
-        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, upvotes: upvotes, downvotes: downvotes, createdAt: createdAt, authorId: authorId, authorName: authorName, height: 180, cityIds: cityIds, keywords: keywords, upvotesThisWeek: upvotesThisWeek, lastUpvoted: lastUpvoted)
+        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, createdAt: createdAt, authorId: authorId, height: 180, cityIds: cityIds, keywords: keywords, upvotes: upvotes, downvotes: downvotes)
     }
     
-    func upvotePost(post: PostModel) async throws {
-        if !wasThisWeek(date: post.lastUpvoted) {
-            try await postsCollection.document(post.id).updateData([
-                "upvotes": FieldValue.increment(Int64(1)),
-                "upvotesThisWeek": 1,
-                "lastUpvoted" : Timestamp(date: Date())
-            ])
-        }
-        else {
-            try await postsCollection.document(post.id).updateData([
-                "upvotes": FieldValue.increment(Int64(1)),
-                "upvotesThisWeek": FieldValue.increment(Int64(1)),
-                "lastUpvoted" : Timestamp(date: Date())
-            ])
-        }
-    }
-    
-    func downvotePost(postId: String) async throws {
-        try await postsCollection.document(postId).updateData([
-            "downvotes": FieldValue.increment(Int64(1))
-        ])
-    }
-    
-    func generateKeywords(title: String, name: String, authorName: String) -> [String] {
-        let inputs = [title, name, authorName]
+    func generateKeywords(title: String, name: String) -> [String] {
+        let inputs = [String(title.prefix(10)), name]
         
         var keywords: [String] = []
         
@@ -251,69 +312,53 @@ class FirebasePostManager {
         return keywords
     }
     
-    func wasThisWeek(date: Timestamp? ) -> Bool {
-        
-        guard let date = date else {
-            return false
-        }
-        
-        let calendar = Calendar.current
-        let now = Date()
-        let targetDate = date.dateValue()
-
-        // Configure the calendar so weeks start on Sunday
-        var adjustedCalendar = calendar
-        adjustedCalendar.firstWeekday = 1 // 1 = Sunday
-
-        // Get the start of the current week (Sunday 12am)
-        guard let startOfWeek = adjustedCalendar.dateInterval(of: .weekOfYear, for: now)?.start else {
-            return false
-        }
-
-        // End of the week = start + 7 days
-        guard let endOfWeek = adjustedCalendar.date(byAdding: .day, value: 7, to: startOfWeek) else {
-            return false
-        }
-
-        // Check if targetDate falls between start and end of current week
-        return (targetDate >= startOfWeek) && (targetDate < endOfWeek)
-    }
-
-    
     let mockPosts: [PostModel] = [
         PostModel(
             id: "1245",
             text: "Exploring SwiftUI",
             name: "Alice",
             imageUrl: "Moose",
-            upvotes: 12,
-            downvotes: 1,
             createdAt: Timestamp(date: Date()),
-            authorId: "Caden", authorName: "Caden134", height: 120,
+            authorId: "Caden",
+            height: 20,
             cityIds: ["NYC001"],
             keywords: ["SwiftUI", "iOS", "Design"],
-            upvotesThisWeek: 0,
-            lastUpvoted: nil
+            upvotes: 0,
+            downvotes: 0
         ),
         PostModel(
             id: "13255",
             text: "Firebase Tricks",
             name: "Bob",
             imageUrl: "Moose",
-            upvotes: 20,
-            downvotes: 2,
             createdAt: Timestamp(date: Date().addingTimeInterval(-1000)),
             authorId: "Caden",
-            authorName: "Caden134",
             height: 120,
             cityIds: ["SF002", "LA003"],
             keywords: ["Firebase", "Firestore", "Backend"],
-            upvotesThisWeek: 0,
-            lastUpvoted: nil
+            upvotes: 0,
+            downvotes: 0
         )
     ]
+
     
+    func weekId(from date: Date = Date()) -> String {
+        let calendar = Calendar(identifier: .iso8601)
+        let year = calendar.component(.yearForWeekOfYear, from: date)
+        let week = calendar.component(.weekOfYear, from: date)
+        return "\(year)-W\(week)"
+    }
 
-
+    func weekStartDate(from date: Date = Date()) -> Date {
+        let calendar = Calendar(identifier: .iso8601)
+        return calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date))!
+    }
 }
 
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
+    }
+}

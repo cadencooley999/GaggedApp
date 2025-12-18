@@ -24,37 +24,58 @@ final class AddPostViewModel: ObservableObject {
             setImage(selection: imageSelection)
         }
     }
-    @Published var citiesFound: [String] = []
     @Published var searchText: String = ""
-    @Published var selectedCities: [String] = []
+    @Published var selectedCities: [City] = []
+    @Published var query: String = ""
+    @Published var filteredCities: [City] = []
     
     let storageManager = StorageManager.shared
     let postManager = FirebasePostManager.shared
     let cityManager = CityManager.shared
     let eventManager = EventManager.shared
+    let pollManager = PollManager.shared
     
-    var cancellables = Set<AnyCancellable>()
-
+    var cancellables: Set<AnyCancellable> = []
+    
     init() {
-        addSubscribers()
+        $query
+            .removeDuplicates()
+            .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.searchCities()
+            }
+            .store(in: &cancellables)
     }
 
     let heights: [CGFloat] = [220]
     
-    func addSubscribers() {
-        $searchText
-            .debounce(for: 0.5, scheduler: DispatchQueue.main)
-            .sink { _ in
-                if self.searchText == "" {
-                    Task {
-                       self.fetchAllCities()
-                    }
-                }
-                else {
-                    self.searchCities(keyword: self.searchText)
-                }
+    func searchCities() {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if q.isEmpty {
+            filteredCities = Array(CityManager.shared.allCities.prefix(50))
+            return
+        }
+
+        Task.detached { [query = q] in
+            // Safely fetch cities from main actor
+            let cities = await CityManager.shared.allCities
+            
+            // Filter
+            let filtered = cities.filter { city in
+                city.city.localizedCaseInsensitiveContains(query)
             }
-            .store(in: &cancellables)
+
+            // Limit results without mutating
+            let limited = filtered.count > 100
+                ? Array(filtered.prefix(100))
+                : filtered
+
+            // Send back to UI
+            await MainActor.run {
+                self.filteredCities = limited
+            }
+        }
     }
     
     func uploadNewPost(text: String, name: String, image: UIImage, cityIds: [String]) async throws -> Bool {
@@ -64,12 +85,28 @@ final class AddPostViewModel: ObservableObject {
             
             let imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
             
-            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, upvotes: 0, downvotes: 0, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, height: 120, cityIds: cityIds, keywords: [], upvotesThisWeek: 0, lastUpvoted: nil)
+            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, height: 120, cityIds: cityIds, keywords: [], upvotes: 0, downvotes: 0)
             try await postManager.uploadPost(post: post)
             print("✅ Success")
             return true
         } catch {
             print("❌ Failed with error: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    func uploadNewPoll(title: String, context: String, options: [String], cityId: String) async throws -> Bool {
+        do {
+            let newPoll = PollModel(id: "", authorId: userId, title: title, context: context, postId: "", optionsCount: options.count, totalVotes: 0, createdAt: Timestamp(date: Date()), cityId: cityId, keywords: [])
+            var pollOptions: [PollOption] = []
+            for (index, option) in options.enumerated() {
+                pollOptions.append(PollOption(id: "", text: option, voteCount: 0, index: index))
+            }
+            try await pollManager.addPoll(poll: newPoll, options: pollOptions)
+            return true
+        }
+        catch {
+            print(error)
             return false
         }
     }
@@ -101,18 +138,6 @@ final class AddPostViewModel: ObservableObject {
                     return
                 }
             }
-        }
-    }
-    
-    func searchCities(keyword: String) {
-        Task {
-
-        }
-    }
-    
-    func fetchAllCities() {
-        Task {
-
         }
     }
 }

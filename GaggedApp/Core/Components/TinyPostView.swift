@@ -44,7 +44,7 @@ struct TinyPostView: View {
                     Spacer()
                     HStack {
                         HStack (spacing: 0) {
-                            Text("\(post.upvotes)")
+                            Text("\(1)")
                                 .fontWeight(.bold)
                                 .font(.caption2)
                                 .foregroundColor(Color.theme.accent)
@@ -53,7 +53,7 @@ struct TinyPostView: View {
                                 .fontWeight(.bold)
                         }
                         HStack (spacing: 0){
-                            Text("\(post.downvotes)")
+                            Text("\(1)")
                                 .font(.caption2)
                                 .fontWeight(.bold)
                                 .foregroundColor(Color.theme.accent)

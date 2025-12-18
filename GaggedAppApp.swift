@@ -27,13 +27,14 @@ struct GaggedAppApp: App {
     
     @AppStorage("hasOnboarded") var hasOnboarded = false
     @AppStorage("isLoggedIn") var isLoggedIn = false
+    @AppStorage("userId") var userId = ""
     @StateObject var homeViewModel = HomeViewModel()
     @StateObject var addPostViewModel = AddPostViewModel()
     @StateObject var profileViewModel = ProfileViewModel()
     @StateObject var postViewModel = PostViewModel()
     @StateObject var searchViewModel = SearchViewModel()
-    @StateObject var eventsViewModel = EventsViewModel()
-    @StateObject var eventViewModel = EventViewModel()
+//    @StateObject var eventsViewModel = EventsViewModel()
+//    @StateObject var eventViewModel = EventViewModel()
     @StateObject var leaderViewModel = LeaderViewModel()
     @StateObject var onBoardingViewModel = OnboardingViewModel()
     @StateObject var settingsViewModel = SettingsViewModel()
@@ -45,15 +46,15 @@ struct GaggedAppApp: App {
     var body: some Scene {
         WindowGroup {
             if hasOnboarded {
-                if isLoggedIn {
+                if isLoggedIn && userId != "" {
                     TabHomeView()
                         .environmentObject(homeViewModel)
                         .environmentObject(addPostViewModel)
                         .environmentObject(profileViewModel)
                         .environmentObject(searchViewModel)
                         .environmentObject(postViewModel)
-                        .environmentObject(eventsViewModel)
-                        .environmentObject(eventViewModel)
+//                        .environmentObject(eventsViewModel)
+//                        .environmentObject(eventViewModel)
                         .environmentObject(leaderViewModel)
                         .environmentObject(settingsViewModel)
                         .environmentObject(locationManager)
@@ -66,6 +67,7 @@ struct GaggedAppApp: App {
             else {
                 OnboardingView()
                     .environmentObject(onBoardingViewModel)
+                    .environmentObject(locationManager)
             }
         }
     }

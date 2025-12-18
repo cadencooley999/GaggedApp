@@ -9,41 +9,49 @@ import SwiftUI
 
 struct HomeView: View {
     
+    func safeArea() -> UIEdgeInsets {
+        guard
+            let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+            let window = scene.windows.first
+        else { return .zero }
+
+        return window.safeAreaInsets
+    }
+    
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var locationManager: LocationManager
     
     @Binding var hideTabBar: Bool
     @Binding var showPostView: Bool
-    @Binding var showSearchView: Bool
     @Binding var selectedPost: PostModel?
     @Binding var selectedTab: TabBarItem
     
     @State var scrollOffset = CGPoint.zero
-    @State var blurHeader: Bool = false
     
     var postAnimation: Namespace.ID
     
     var body: some View {
         ZStack {
             Color.theme.background.ignoresSafeArea()
-            Image("AppImage")
-                .resizable()
-                .frame(width: 300)
-                .frame(height: 300)
+//            Image("AppImage")
+//                .resizable()
+//                .frame(width: 300)
+//                .frame(height: 300)
             VStack(spacing: 0) {
                 ScrollView(showsIndicators: true) {
-                    VStack(spacing: 0) {
-                        postSection
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
-                    }
-                    .padding(.top, 120)
-                    .padding(.bottom, 64)
+                        VStack(spacing: 0) {
+                            postSection
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                                .transition(.opacity)
+                        }
+                        .padding(.top, 60 + safeArea().top)
+                        .padding(.bottom, 64)
                 }
                 .refreshable {
                     Task {
-                        try await homeViewModel.fetchMorePosts()
+                        try await homeViewModel.fetchMorePosts(cities: locationManager.citiesInRange)
                     }
                 }
                 .onScrollPhaseChange({ oldPhase, newPhase, context in
@@ -59,115 +67,48 @@ struct HomeView: View {
                         }
                     }
                     scrollOffset = newOffset
-                    if newPhase.isScrolling {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            blurHeader = true
-                        }
-                    }
-                    if newPhase == .decelerating  {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                blurHeader = false
-                            }
-                        })
-                    }
-                    if newPhase == .idle {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            blurHeader = false
-                        }
-                    }
                 })
                 .ignoresSafeArea()
             }
-            VStack(spacing: 0) {
-                VStack(spacing: 0){
-                    header
-                        .frame(height: 55)
-                        .opacity(blurHeader ? 0.7 : 1)
-                    Divider()
+//            VStack(spacing: 0) {
+//                VStack(spacing: 0){
+//                    header
+//                        .frame(height: 55)
+//                    Divider()
+//                }
+//                .background(.thinMaterial)
+//                Spacer()
+//            }
+            if homeViewModel.isLoading {
+                ZStack {
+                    Color.clear.ignoresSafeArea()
+                    ProgressView()
                 }
-                .background(Color.theme.background.opacity(blurHeader ? 0.7 : 1))
-                Spacer()
             }
         }
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.width < -80 {
-                        selectedTab = TabBarItem(iconName: "EventsIcon", title: "Events")
-                        hideTabBar = false
-                    }
-                    if value.translation.width > 80 {
-                        selectedTab = TabBarItem(iconName: "LeaderIcon", title: "LeaderBoard")
-                        hideTabBar = false
-                    }
-                }
-        )
+//        .gesture(
+//            DragGesture()
+//                .onEnded { value in
+//                    if value.translation.width < -80 {
+//                        selectedTab = TabBarItem(iconName: "EventsIcon", title: "Events")
+//                        hideTabBar = false
+//                    }
+//                    if value.translation.width > 80 {
+//                        selectedTab = TabBarItem(iconName: "LeaderIcon", title: "LeaderBoard")
+//                        hideTabBar = false
+//                    }
+//                }
+//        )
         .task {
             Task {
-                locationManager.requestLocation()
-                try await homeViewModel.fetchPostsIfNeeded()
+                print(homeViewModel.hasLoaded)
+                print("HOME TASK RUN")
+                await locationManager.requestLocationIfNeeded(execute: !homeViewModel.hasLoaded)
+                try await homeViewModel.fetchPostsIfNeeded(cities: locationManager.citiesInRange)
+                homeViewModel.hasLoaded = true
             }
         }
     }
-    
-    var header: some View {
-        HStack(spacing: 16) {
-        // Left: App name only (Logo removed as requested)
-            Text("Gagged")
-                .font(.title2.bold())
-                .foregroundColor(Color.theme.darkBlue)
-            
-            Spacer()
-            
-            HStack(spacing: 0){
-                Text(locationManager.cityName ?? "Unknown")
-                    .font(.headline)
-                    .foregroundColor(Color.theme.darkBlue)
-                    .lineLimit(1)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.theme.lightBlue.opacity(0.2))
-                    )
-                    .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
-                
-                Button(action: {
-                    locationManager.requestLocation()
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.subheadline.bold())
-                        .foregroundColor(Color.theme.darkBlue)
-                        .padding(8) // Gives a good tap target size
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            
-            Spacer()
-            
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                     hideTabBar = true
-                     showSearchView = true
-                }
-            }) {
-                Image(systemName: "magnifyingglass")
-                    .font(.title2)
-                    .foregroundColor(Color.theme.darkBlue)
-                    .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.theme.darkBlue.opacity(0.7), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-    }
-
     
     var postSection: some View {
         HStack {
@@ -175,17 +116,17 @@ struct HomeView: View {
                 VStack {
                     if homeViewModel.postMatrix.indices.contains(x) {
                         if !homeViewModel.postMatrix[x].isEmpty {
-                            ForEach(homeViewModel.postMatrix[x]) { post in
+                            ForEach(homeViewModel.postMatrix[x], id: \.self) { post in
                                 MiniPostView(post: post, width: nil)
+                                    .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
                                     .contentShape(Rectangle())
-                                    .matchedGeometryEffect(id: post.id, in: postAnimation)
+                                    .transition(.opacity)
                                     .onTapGesture {
                                         print("Little Post Tapped")
                                         selectedPost = post
                                         postViewModel.setPost(postSelection: post)
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             showPostView = true
-                                            hideTabBar = true
                                         }
                                         Task {
                                             postViewModel.commentsIsLoading = true
@@ -205,9 +146,4 @@ struct HomeView: View {
 
 }
 
-#Preview {
-    @Namespace var dummy
-    
-    HomeView(hideTabBar: .constant(false), showPostView: .constant(false), showSearchView: .constant(false), selectedPost: .constant(nil), selectedTab: .constant(TabBarItem(iconName: "HomeIcon", title: "Home")), postAnimation:  dummy)
-        .environmentObject(HomeViewModel.previewModel())
-}
+

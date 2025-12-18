@@ -25,42 +25,52 @@ final class LeaderViewModel: ObservableObject {
     @Published var allTimeUp: [PostModel] = []
     @Published var thisWeekUp: [PostModel] = []
     @Published var allTimeDown: [PostModel] = []
+    @Published var isLoading: Bool = false
     
     let postManager = FirebasePostManager.shared
     
-    func fetchLeaderboardsIfNeeded() async throws {
+    func fetchLeaderboardsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
-        let allUp = try await postManager.getTopUpsAllTime()
-        let thisWeek = try await postManager.getTopUpsThisWeek()
-        let allDown = try await postManager.getTopDownsAllTime()
+        isLoading = true
+        let allUp = try await postManager.getTopUpsAllTime(from: cities)
+        let thisWeek = try await postManager.getTopUpsThisWeek(from: cities)
+        let allDown = try await postManager.getTopDownsAllTime(from: cities)
         
         allTimeUp = allUp
         thisWeekUp = thisWeek
         allTimeDown = allDown
         hasLoaded = true
+        isLoading = false
     }
     
-    func fetchMoreLeaderboards() async throws {
-        let allUp = try await postManager.getTopUpsAllTime()
-        let thisWeek = try await postManager.getTopUpsThisWeek()
-        let allDown = try await postManager.getTopDownsAllTime()
+    func fetchMoreLeaderboards(cities: [String]) async throws {
+        print("GEtting leaders")
+        allTimeUp = []
+        thisWeekUp = []
+        allTimeDown = []
+        isLoading = true
+        let allUp = try await postManager.getTopUpsAllTime(from: cities)
+        let thisWeek = try await postManager.getTopUpsThisWeek(from: cities)
+        let allDown = try await postManager.getTopDownsAllTime(from: cities)
         
         allTimeUp = allUp
         thisWeekUp = thisWeek
         allTimeDown = allDown
+        isLoading = false
     }
     
     func getUpStat(index: Int, list: rankList) -> Int? {
-        switch list {
-        case .allTimeUp:
-            guard allTimeUp.indices.contains(index) else { return nil }
-            return allTimeUp[index].upvotes
-        case .thisWeekUp:
-            guard thisWeekUp.indices.contains(index) else { return nil }
-            return thisWeekUp[index].upvotesThisWeek
-        case .allTimeDown:
-            guard allTimeDown.indices.contains(index) else { return nil }
-            return allTimeDown[index].downvotes
-        }
+//        switch list {
+//        case .allTimeUp:
+//            guard allTimeUp.indices.contains(index) else { return nil }
+//            return allTimeUp[index].upvotes
+//        case .thisWeekUp:
+//            guard thisWeekUp.indices.contains(index) else { return nil }
+//            return thisWeekUp[index].upvotesThisWeek
+//        case .allTimeDown:
+//            guard allTimeDown.indices.contains(index) else { return nil }
+//            return allTimeDown[index].downvotes
+//        }
+        return 0
     }
 }

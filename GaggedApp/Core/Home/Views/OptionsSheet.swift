@@ -14,11 +14,10 @@ struct OptionsSheet: View {
     @Binding var selectedItemForOptions: GenericItem?
     @Binding var showOptionsSheet: Bool
     @Binding var showPostView: Bool
-    @Binding var hideTabBar: Bool
     
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var profileViewModel: ProfileViewModel
-    @EnvironmentObject var eventViewModel: EventViewModel
+//    @EnvironmentObject var eventViewModel: EventViewModel
     
     @State var isSaved: Bool = false
     
@@ -27,51 +26,53 @@ struct OptionsSheet: View {
             Color.theme.background
                 .ignoresSafeArea()
             VStack {
-                HStack {
-                    VStack(alignment: .center, spacing: 10) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.title)
-                            .foregroundStyle(Color.theme.accent)
-                        Text("Share")
-                            .font(.caption)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.theme.lightGray.opacity(0.5).cornerRadius(15))
-                    VStack(alignment: .center, spacing: 10) {
-                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                            .font(.title)
-                            .foregroundStyle(Color.theme.accent)
-                        Text("Save")
-                            .font(.caption)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.theme.lightGray.opacity(0.5).cornerRadius(15))
-                    .onTapGesture {
-                        print(isSaved)
-                        if !isSaved {
-                            if let selected = selectedItemForOptions {
-                                switch selected {
-                                case .post(let post):
-                                    postViewModel.savePost(postId: post.id)
-                                case .event(let event):
-                                    eventViewModel.saveEvent(eventId: event.id)
-                                case .comment(let comment):
-                                    break
-                                }
-                                isSaved = true
-                            }
+                if case .comment(_) = selectedItemForOptions {
+                    EmptyView()
+                }
+                else {
+                    HStack {
+                        VStack(alignment: .center, spacing: 10) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.title)
+                                .foregroundStyle(Color.theme.accent)
+                            Text("Share")
+                                .font(.caption)
                         }
-                        else {
-                            if let selected = selectedItemForOptions {                            isSaved = false
-                                switch selected {
-                                case .post(let post):
-                                    postViewModel.unSavePost(postId: post.id)
-                                case .event(let event):
-                                    eventViewModel.unSaveEvent(eventId: event.id)
-                                case .comment(let comment):
-                                    break
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.theme.lightGray.opacity(0.5).cornerRadius(15))
+                        VStack(alignment: .center, spacing: 10) {
+                            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                                .font(.title)
+                                .foregroundStyle(Color.theme.accent)
+                            Text("Save")
+                                .font(.caption)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.theme.lightGray.opacity(0.5).cornerRadius(15))
+                        .onTapGesture {
+                            print(isSaved)
+                            if !isSaved {
+                                if let selected = selectedItemForOptions {
+                                    switch selected {
+                                    case .post(let post):
+                                        postViewModel.savePost(postId: post.id)
+                                    case .comment(let comment):
+                                        break
+                                    }
+                                    isSaved = true
+                                }
+                            }
+                            else {
+                                if let selected = selectedItemForOptions {
+                                    isSaved = false
+                                    switch selected {
+                                    case .post(let post):
+                                        postViewModel.unSavePost(postId: post.id)
+                                    case .comment(let comment):
+                                        break
+                                    }
                                 }
                             }
                         }
@@ -89,10 +90,6 @@ struct OptionsSheet: View {
                         Task {
                             isSaved = await postViewModel.isSaved(postId: post.id)
                         }
-                    case .event(let event):
-                        Task {
-                            isSaved = await eventViewModel.isSaved(eventId: event.id)
-                        }
                     case .comment(let comment):
                         break
                     }
@@ -104,22 +101,29 @@ struct OptionsSheet: View {
     
     var actionsList: some View {
         VStack(alignment: .leading, spacing: 0){
-            HStack {
-                ZStack {
-                    Color.clear
-                    Image(systemName: "flag")
-                        .foregroundStyle(Color.theme.brightRed)
-                }
-                .frame(width: 20)
-                Text("Report")
-                    .font(.body)
-                    .foregroundColor(Color.theme.brightRed)
-                Spacer()
+            if case .comment(_) = selectedItemForOptions {
+               EmptyView()
             }
-            .padding()
-            .frame(height: 50)
+            else {
+                HStack {
+                    ZStack {
+                        Color.clear
+                        Image(systemName: "flag")
+                            .foregroundStyle(Color.theme.brightRed)
+                    }
+                    .frame(width: 20)
+                    Text("Report")
+                        .font(.body)
+                        .foregroundColor(Color.theme.brightRed)
+                    Spacer()
+                }
+                .padding()
+                .frame(height: 50)
+                if selectedItemForOptions?.authorId == userId {
+                    Divider()
+                }
+            }
             if selectedItemForOptions?.authorId == userId {
-                Divider()
                 HStack {
                     ZStack {
                         Color.clear
@@ -138,16 +142,9 @@ struct OptionsSheet: View {
                                     switch selected {
                                     case .post(let post):
                                         try await postViewModel.deletePost(postId: post.id)
+                                        showOptionsSheet = false
+                                        showPostView = false
                                         try await profileViewModel.getMoreUserPosts()
-                                        showOptionsSheet = false
-                                        showPostView = false
-                                        hideTabBar = false
-                                    case .event(let event):
-                                        try await eventViewModel.deleteEvent(eventId: event.id)
-                                        try await profileViewModel.getMoreUserEvents()
-                                        showOptionsSheet = false
-                                        showPostView = false
-                                        hideTabBar = false
                                     case .comment(let comment):
                                         try await postViewModel.deleteComment(commentId: comment.id)
                                         try await postViewModel.fetchComments()

@@ -12,7 +12,7 @@ struct UserModel: Identifiable {
     let id: String
     let username: String
     let garma: Int
-    let imageUrl: String
+    let imageAddress: String
     let createdAt: Timestamp
     let keywords: [String]
     

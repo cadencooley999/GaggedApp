@@ -12,12 +12,10 @@ import FirebaseAuth
 struct AuthDataResultModel {
     let uid: String
     let email: String
-    let photoURL: String
     
     init(user: User) {
         self.uid = user.uid
         self.email = user.email ?? ""
-        self.photoURL = user.photoURL?.absoluteString ?? ""
     }
 }
 
@@ -26,7 +24,7 @@ class UserManager {
     @AppStorage("userEmail") var userEmail = ""
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
-    @AppStorage("profImageUrl") var profImageUrl = ""
+    @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress = ""
     
     let specificDate = Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 1, hour: 0, minute: 0))! // Example for a specific date
     
@@ -44,11 +42,15 @@ class UserManager {
         return AuthDataResultModel(user: authDataResult.user)
     }
     
-    func createUser(user: AuthDataResultModel, usernm: String, imageUrl: String) async throws {
+    func setNewProfileImage(address: String) async throws {
+        try await usersCollection.document(userId).updateData(["imageAddress": address])
+    }
+    
+    func createUser(user: AuthDataResultModel, usernm: String, imageAddress: String) async throws {
         let userData: [String:Any] = [
             "uid" : user.uid,
             "email" : user.email,
-            "imageURL" : imageUrl,
+            "imageAddress" : imageAddress,
             "garma" : 0,
             "username" : usernm,
             "createdAt": Timestamp(date: Date())
@@ -57,7 +59,7 @@ class UserManager {
         userEmail = user.email
         userId = user.uid
         username = usernm
-        profImageUrl = imageUrl
+        chosenProfileImageAddress = imageAddress
     }
     
     func logInUser(email: String, password: String) async throws -> AuthDataResultModel {
@@ -71,6 +73,55 @@ class UserManager {
             print("User signed out successfully")
         } catch let signOutError as NSError {
             print("Error signing out: %@", signOutError)
+        }
+    }
+    
+    func reauthenticateAndChangePassword(
+        email: String,
+        currentPassword: String,
+        newPassword: String
+    ) async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not logged in"])
+        }
+
+        let credential = EmailAuthProvider.credential(withEmail: email, password: currentPassword)
+
+        // Silent re-auth
+        try await user.reauthenticate(with: credential)
+
+        // Retry password change
+        try await user.updatePassword(to: newPassword)
+    }
+    
+    func changeUsername(newUsername: String) async throws {
+        try await usersCollection.document(userId).updateData([
+            "username": newUsername,
+            "lastUsernameChange": Timestamp(date: Date())
+        ])
+    }
+
+    func lastChange() async throws -> Date? {
+        let userData = try await usersCollection.document(userId).getDocument()
+        
+        guard let last = userData["lastUsernameChange"] as? Timestamp else {
+            // Never changed before → allowed
+            return nil
+        }
+        
+        return last.dateValue()
+    }
+    
+    
+    func forgotPassword(email: String) async throws {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        do {
+            try await Auth.auth().sendPasswordReset(withEmail: trimmed)
+            print("✅ Reset email sent")
+        } catch {
+            print("❌ Firebase error:", error.localizedDescription)
         }
     }
     
@@ -95,14 +146,38 @@ class UserManager {
         try await usersCollection.document(userId).delete()
     }
     
-    func loadUserInfo(userId: String) async throws -> UserModel {
-        var doc = try await usersCollection.document(userId).getDocument()
+    func fetchUser(userId: String) async throws -> UserModel {
+        let doc = try await usersCollection.document(userId).getDocument()
         let user = mapDoc(doc)
         return user
     }
     
+    func fetchUsers(userIds: [String]) async throws -> [UserModel] {
+        guard !userIds.isEmpty else { return [] }
+
+        var users: [UserModel] = []
+
+        // 10 IDs per Firestore "in" query
+        let chunks = userIds.chunked(into: 10)
+
+        for chunk in chunks {
+            let snapshot = try await usersCollection
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+
+            for doc in snapshot.documents {
+                if let user = try? mapDoc(doc) {
+                    users.append(user)
+                }
+            }
+        }
+
+        return users
+    }
+
+    
     func updateProfileImage(imageUrl: String, userId: String) async throws {
-        try await usersCollection.document(userId).updateData(["imageURL": imageUrl])
+        try await usersCollection.document(userId).updateData(["imageAddress": imageUrl])
     }
     
     func generateKeywords(username: String) -> [String] {
@@ -127,15 +202,16 @@ class UserManager {
     }
     
     func mapDoc(_ doc: DocumentSnapshot) -> UserModel {
-        let id = doc["userId"] as? String ?? ""
+        let id = doc["uid"] as? String ?? ""
         let username = doc["username"] as? String ?? "Anonymous"
-        let imageUrl = doc["imageUrl"] as? String ?? ""
+        let imageAddress = doc["imageAddress"] as? String ?? ""
         let garma = doc["garma"] as? Int ?? 0
         let createdAt = doc["createdAt"] as? Timestamp ?? Timestamp(date: Date())
         let keywords = doc["keywords"] as? [String] ?? []
         
         print("mapping doc", id)
         
-        return UserModel(id: id, username: username, garma: garma, imageUrl: imageUrl, createdAt: createdAt, keywords: keywords)
+        return UserModel(id: id, username: username, garma: garma, imageAddress: imageAddress, createdAt: createdAt, keywords: keywords)
     }
 }
+

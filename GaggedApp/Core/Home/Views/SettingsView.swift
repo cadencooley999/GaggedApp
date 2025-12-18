@@ -12,9 +12,11 @@ struct SettingsView: View {
     @EnvironmentObject var vm: SettingsViewModel
     
     @Binding var showSettingsView: Bool
-    @Binding var hideTabBar: Bool
     
     @State var showDeleteView: Bool = false
+    @State var showCitySelector: Bool = false
+    @State var showChangePassword: Bool = false
+    @State var showChangeUsername: Bool = false
 
     var body: some View {
         ZStack {
@@ -23,10 +25,9 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     header
-                        .padding(.horizontal)
-                        .padding(.bottom)
-                    Divider()
                     notificationsSection
+                        .padding(.top)
+                    citySection
                         .padding(.top)
                     accountSection
                         .padding(.top)
@@ -40,7 +41,28 @@ struct SettingsView: View {
                 deletePopUp(showDeleteView: $showDeleteView)
                     .transition(.opacity)
             }
+            
+            if showCitySelector {
+                CityPickerView2(dissmissable: true, showCityPickerView: $showCitySelector)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
+            
+            if showChangePassword {
+                ChangePassword(showChangePassword: $showChangePassword)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
+            
+            if showChangeUsername {
+                ChangeUserName(showChangeUsername: $showChangeUsername)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
         }
+        .animation(.easeInOut(duration: 0.3), value: showCitySelector)
+        .animation(.easeInOut(duration: 0.3), value: showChangePassword)
+        .animation(.easeInOut(duration: 0.3), value: showChangeUsername)
     }
     
     var header: some View {
@@ -52,7 +74,6 @@ struct SettingsView: View {
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showSettingsView = false
-                            hideTabBar = false
                         }
                     }
                 Spacer()
@@ -60,18 +81,56 @@ struct SettingsView: View {
                     .font(.headline)
                 Spacer()
                 Image(systemName: "chevron.left")
-                    .font(.title3)
+                    .font(.headline)
                     .padding(.trailing, 8)
                     .opacity(0)
             }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            Divider()
         }
+        .frame(height: 55)
     }
     
     
     var citySection: some View {
-        VStack {
-            Text("Current City: New York")
-            Text("Change City")
+        VStack(alignment: .leading, spacing: 16) {
+            
+            // Section Title
+            Text("Location")
+                .font(.headline)
+                .foregroundColor(Color.theme.gray)
+                .padding(.horizontal)
+            
+            VStack(spacing: 0) {
+                
+                // User License Agreement
+                settingsButtonRow(
+                    icon: "mappin.and.ellipse",
+                    iconColor: .black,
+                    title: "Change City"
+                ) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showCitySelector = true
+                    }
+                }
+                
+                Divider()
+                
+                // User License Agreement
+                settingsButtonRow(
+                    icon: "map.circle",
+                    iconColor: .black,
+                    title: "Location Permissions"
+                ) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+            .background(Color.theme.lightGray.opacity(0.15))
+            .cornerRadius(16)
+            .padding(.horizontal)
         }
     }
     
@@ -84,6 +143,23 @@ struct SettingsView: View {
                 .padding(.horizontal)
             
             VStack(spacing: 0) {
+                
+//                settingsRow(
+//                    icon: "line.3.horizontal",
+//                    title: "Open Device Settings",
+//                    trailing: {
+//                        Image(systemName: "chevron.right")
+//                            .font(.title3)
+//                            .foregroundStyle(Color.theme.lightBlue)
+//                            .onTapGesture {
+//                                if let url = URL(string: UIApplication.openSettingsURLString) {
+//                                    UIApplication.shared.open(url)
+//                                }
+//                            }
+//                    }
+//                )
+                
+//                Divider()
                 
                 // --- Enable Notifications ---
                 settingsRow(
@@ -140,7 +216,7 @@ struct SettingsView: View {
                     icon: "person.badge.key",
                     title: "Change Username"
                 ) {
-                    // action
+                    showChangeUsername = true
                 }
                 
                 Divider()
@@ -148,9 +224,9 @@ struct SettingsView: View {
                 // Email & Password
                 settingsButtonRow(
                     icon: "envelope.badge",
-                    title: "Email & Password"
+                    title: "Change Password"
                 ) {
-                    // action
+                    showChangePassword = true
                 }
                 
                 Divider()
@@ -304,7 +380,7 @@ struct deletePopUp: View {
                         .foregroundColor(Color.theme.accent)
                     
                     if failed {
-                        Text("Failed to delete - try again")
+                        Text("Failed to delete... try again")
                             .font(.caption)
                             .foregroundColor(Color.theme.darkRed)
                             .padding(.vertical, 4)

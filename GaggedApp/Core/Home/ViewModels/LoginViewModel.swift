@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 
+@MainActor
 final class LoginViewModel: ObservableObject {
     
     @AppStorage("userEmail") var userEmail = ""

@@ -16,7 +16,7 @@ public struct EllipsesToggleView: View {
         HStack(spacing: 0){
             Circle()
                 .frame(width: 6)
-                .foregroundColor(toggleValue ? Color.theme.gray : accentColor)
+                .foregroundColor(toggleValue ? Color.theme.lightGray : accentColor)
                 .padding(.trailing, 4)
             Circle()
                 .frame(width: 6)

@@ -14,13 +14,14 @@ struct miniPostImage: View {
     let url: String
     let height: CGFloat
     let width: CGFloat
-    @State var isLoading: Bool = true
+    @State var isLoading: Bool = false
     @State var isFailed: Bool = false
     
     var body: some View {
         ZStack {
             KFImage(URL(string: url))
                 .onFailure { error in
+                    print("error", error)
                     isFailed = true
                 }
                 .placeholder {
@@ -28,14 +29,12 @@ struct miniPostImage: View {
                         .frame(width: width, height: height)
                 }
                 .onSuccess { _ in
-                    isLoading = false
                 }
                 .resizable()
                 .scaledToFill()
                 .frame(width: width, height: height)
                 .clipped()
                 .onAppear {
-                    isLoading = true
                 }
                 .opacity(isLoading ? 0 : 1)
             if isLoading {
@@ -97,60 +96,6 @@ struct postImage: View {
                 .frame(height: 350)
             }
         }
-    }
-}
-
-struct profileImageClip: View {
-    let url: String
-    let height: CGFloat
-    var params: ProfPicParams
-    @State var isLoading: Bool = false
-    @State var isFailed: Bool = false
-    
-    var body: some View {
-        let cropSize = height
-        let radius = cropSize / 2
-        ZStack {
-            KFImage(URL(string: url))
-                .onFailure { error in
-                    isFailed = true
-                }
-                .placeholder {
-                    Image("blank-profile")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: height, height: height)
-                        .clipShape(Circle())
-                }
-                .onSuccess { _ in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isLoading = false
-                    }
-                }
-                .resizable()
-                .scaledToFill()
-                .frame(width: cropSize, height: cropSize)
-                .scaleEffect(params.scale)
-                .offset(x: clampedOffset(value: params.offsetX*cropSize, cropSize: cropSize, radius: radius, scale: params.scale), y:  clampedOffset(value: params.offsetY*cropSize, cropSize: cropSize, radius: radius, scale: params.scale))
-                .clipShape(Circle())
-                .onAppear {
-                }
-                .overlay {
-                    if isLoading || isFailed {
-                        Image("blank-profile")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: height, height: height)
-                            .clipShape(Circle())
-                    }
-                }
-        }
-    }
-    
-    private func clampedOffset(value: CGFloat, cropSize: CGFloat, radius: CGFloat, scale: CGFloat) -> CGFloat {
-        let scaledRadius = radius * scale
-        let maxOffset = scaledRadius - radius
-        return max(-maxOffset, min(value, maxOffset))
     }
 }
 

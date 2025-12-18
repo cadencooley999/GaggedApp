@@ -11,8 +11,8 @@ struct LeaderView: View {
     
     @EnvironmentObject var leaderViewModel: LeaderViewModel
     @EnvironmentObject var postViewModel: PostViewModel
+    @EnvironmentObject var locationManager: LocationManager
     
-    @Binding var hideTabBar: Bool
     @Binding var showPostView: Bool
     @Binding var selectedPost: PostModel?
     @Binding var selectedTab: TabBarItem
@@ -26,65 +26,44 @@ struct LeaderView: View {
             Color.theme.background
                 .ignoresSafeArea(edges: .all)
             ScrollView {
-                VStack (spacing: 380){
+                VStack (spacing: 0){
                     if leaderViewModel.thisWeekUp.count > 0 {
                         TopUpThisWeek
                     }
-                    TopUpAllTime
-                    MostDownAllTime
+                    if leaderViewModel.allTimeUp.count > 0 {
+                        TopUpAllTime
+                    }
+                    if leaderViewModel.allTimeDown.count > 0 {
+                        MostDownAllTime
+                    }
+                    if leaderViewModel.isLoading {
+                        ProgressView()
+                            .padding(.top, 50)
+                    }
                 }
-                .padding(.top, 82)
+                .padding(.top, 116)
                 .padding(.horizontal)
-                .padding(.bottom, 420)
+                .padding(.bottom, 64)
             }
 
             .refreshable {
                 Task {
-                    try await leaderViewModel.fetchMoreLeaderboards()
+                    try await leaderViewModel.fetchMoreLeaderboards(cities: locationManager.citiesInRange)
                 }
-            }
-            VStack(spacing: 0){
-                header
-                    .frame(height: 55)
-                    .background(Color.theme.background)
-                Divider()
-                Spacer()
             }
         }
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.width < -80 { // left swipe
-                        selectedTab = TabBarItem(iconName: "HomeIcon", title: "Home")
-                    }
-                }
-        )
+//        .gesture(
+//            DragGesture()
+//                .onEnded { value in
+//                    if value.translation.width < -80 { // left swipe
+//                        selectedTab = TabBarItem(iconName: "HomeIcon", title: "Home")
+//                    }
+//                }
+//        )
         .task {
             Task {
-                try await leaderViewModel.fetchLeaderboardsIfNeeded()
+                try await leaderViewModel.fetchLeaderboardsIfNeeded(cities: locationManager.citiesInRange)
             }
-        }
-    }
-    
-    var header: some View {
-        VStack(spacing: 0){
-            HStack(spacing: 0){
-                Image(systemName: "chevron.down")
-                    .font(.title2)
-                Text("Leaderboards")
-                    .font(.title2)
-                    .padding(.horizontal, 4)
-                Text("San Marcos, TX")
-                    .italic()
-                    .font(.title2)
-                    .padding(.horizontal, 8)
-                    .foregroundStyle(Color.theme.darkBlue)
-                Spacer()
-                Image(systemName: "magnifyingglass")
-                    .opacity(0)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
         }
     }
     
@@ -94,39 +73,67 @@ struct LeaderView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom)
-            GeometryReader {
-                let width = $0.size.width
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    LoopingStack(maxTranslationWidth: width, thisWeekIndex: $thisWeekIndex) {
-                        ForEach(leaderViewModel.thisWeekUp) { post in
-                                MiniPostView(post: post, width: 200)
+                    ForEach(leaderViewModel.thisWeekUp) { post in
+                        VStack {
+                            MiniPostView(post: post, width: 220)
+                                .onTapGesture {
+                                    print("Little Post Tapped")
+                                    selectedPost = leaderViewModel.thisWeekUp[thisWeekIndex]
+                                    postViewModel.setPost(postSelection: leaderViewModel.thisWeekUp[thisWeekIndex])
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showPostView = true
+                                    }
+                                    Task {
+                                        postViewModel.commentsIsLoading = true
+                                        try await postViewModel.fetchComments()
+                                        postViewModel.commentsIsLoading = false
+                                    }
+                                }
+                            HStack {
+                                Text("+ \(leaderViewModel.getUpStat(index: thisWeekIndex, list: .thisWeekUp) ?? 0)")
+                                Image(systemName: "arrow.up")
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(Color.green)
+                            }
                         }
-                    }
-                    .onTapGesture {
-                        print("Little Post Tapped")
-                        selectedPost = leaderViewModel.thisWeekUp[thisWeekIndex]
-                        postViewModel.setPost(postSelection: leaderViewModel.thisWeekUp[thisWeekIndex])
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showPostView = true
-                            hideTabBar = true
-                        }
-                        Task {
-                            postViewModel.commentsIsLoading = true
-                            try await postViewModel.fetchComments()
-                            postViewModel.commentsIsLoading = false
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.horizontal)
-                    HStack {
-                        Text("+ \(leaderViewModel.getUpStat(index: thisWeekIndex, list: .thisWeekUp) ?? 0)")
-                        Image(systemName: "arrow.up")
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.green)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
             }
+            .padding(.vertical)
+//            GeometryReader {
+//                let width = $0.size.width
+//                HStack {
+//                    LoopingStack(maxTranslationWidth: width, thisWeekIndex: $thisWeekIndex) {
+//                        ForEach(leaderViewModel.thisWeekUp) { post in
+//                                MiniPostView(post: post, width: 220)
+//                        }
+//                    }
+//                    .onTapGesture {
+//                        print("Little Post Tapped")
+//                        selectedPost = leaderViewModel.thisWeekUp[thisWeekIndex]
+//                        postViewModel.setPost(postSelection: leaderViewModel.thisWeekUp[thisWeekIndex])
+//                        withAnimation(.easeInOut(duration: 0.2)) {
+//                            showPostView = true
+//                        }
+//                        Task {
+//                            postViewModel.commentsIsLoading = true
+//                            try await postViewModel.fetchComments()
+//                            postViewModel.commentsIsLoading = false
+//                        }
+//                    }
+//                    .contentShape(Rectangle())
+//                    .padding(.horizontal)
+//                    HStack {
+//                        Text("+ \(leaderViewModel.getUpStat(index: thisWeekIndex, list: .thisWeekUp) ?? 0)")
+//                        Image(systemName: "arrow.up")
+//                            .fontWeight(.bold)
+//                            .foregroundStyle(Color.green)
+//                    }
+//                }
+//                .frame(maxWidth: .infinity, alignment: .center)
+//            }
         }
     }
     
@@ -136,39 +143,35 @@ struct LeaderView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom)
-            GeometryReader {
-                let width = $0.size.width
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    LoopingStack(maxTranslationWidth: width, thisWeekIndex: $allUpIndex) {
-                        ForEach(leaderViewModel.allTimeUp) { post in
-                                MiniPostView(post: post, width: 200)
+                    ForEach(leaderViewModel.allTimeUp) { post in
+                        VStack {
+                            MiniPostView(post: post, width: 220)
+                                .onTapGesture {
+                                    print("Little Post Tapped")
+                                    selectedPost = post
+                                    postViewModel.setPost(postSelection: post)
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showPostView = true
+                                    }
+                                    Task {
+                                        postViewModel.commentsIsLoading = true
+                                        try await postViewModel.fetchComments()
+                                        postViewModel.commentsIsLoading = false
+                                    }
+                                }
+                            HStack {
+                                Text("+ \(leaderViewModel.getUpStat(index: thisWeekIndex, list: .thisWeekUp) ?? 0)")
+                                Image(systemName: "arrow.up")
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(Color.green)
+                            }
                         }
-                    }
-                    .onTapGesture {
-                        print("Little Post Tapped")
-                        selectedPost = leaderViewModel.allTimeUp[allUpIndex]
-                        postViewModel.setPost(postSelection: leaderViewModel.allTimeUp[allUpIndex])
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showPostView = true
-                            hideTabBar = true
-                        }
-                        Task {
-                            postViewModel.commentsIsLoading = true
-                            try await postViewModel.fetchComments()
-                            postViewModel.commentsIsLoading = false
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.horizontal)
-                    HStack {
-                        Text("+ \(leaderViewModel.getUpStat(index: allUpIndex, list: .allTimeUp) ?? 0)")
-                        Image(systemName: "arrow.up")
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.green)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
             }
+            .padding(.vertical)
         }
     }
     
@@ -178,43 +181,67 @@ struct LeaderView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom)
-            GeometryReader {
-                let width = $0.size.width
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    LoopingStack(maxTranslationWidth: width, thisWeekIndex: $allDownIndex) {
-                        ForEach(leaderViewModel.allTimeDown) { post in
-                                MiniPostView(post: post, width: 200)
+                    ForEach(leaderViewModel.allTimeDown) { post in
+                        VStack {
+                            MiniPostView(post: post, width: 220)
+                                .onTapGesture {
+                                    print("Little Post Tapped")
+                                    selectedPost = post
+                                    postViewModel.setPost(postSelection: post)
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showPostView = true
+                                    }
+                                    Task {
+                                        postViewModel.commentsIsLoading = true
+                                        try await postViewModel.fetchComments()
+                                        postViewModel.commentsIsLoading = false
+                                    }
+                                }
+                            HStack {
+                                Text("+ \(leaderViewModel.getUpStat(index: thisWeekIndex, list: .thisWeekUp) ?? 0)")
+                                Image(systemName: "arrow.down")
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(Color.red)
+                            }
                         }
-                    }
-                    .onTapGesture {
-                        print("Little Post Tapped")
-                        selectedPost = leaderViewModel.allTimeDown[allDownIndex]
-                        postViewModel.setPost(postSelection: leaderViewModel.allTimeDown[allDownIndex])
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showPostView = true
-                            hideTabBar = true
-                        }
-                        Task {
-                            postViewModel.commentsIsLoading = true
-                            try await postViewModel.fetchComments()
-                            postViewModel.commentsIsLoading = false
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.horizontal)
-                    HStack {
-                        Text("+ \(leaderViewModel.getUpStat(index: allDownIndex, list: .allTimeDown) ?? 0)")
-                        Image(systemName: "arrow.down")
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.red)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
             }
+            .padding(.vertical)
+//            GeometryReader {
+//                let width = $0.size.width
+//                HStack {
+//                    LoopingStack(maxTranslationWidth: width, thisWeekIndex: $allDownIndex) {
+//                        ForEach(leaderViewModel.allTimeDown) { post in
+//                                MiniPostView(post: post, width: 220)
+//                        }
+//                    }
+//                    .onTapGesture {
+//                        print("Little Post Tapped")
+//                        selectedPost = leaderViewModel.allTimeDown[allDownIndex]
+//                        postViewModel.setPost(postSelection: leaderViewModel.allTimeDown[allDownIndex])
+//                        withAnimation(.easeInOut(duration: 0.2)) {
+//                            showPostView = true
+//                        }
+//                        Task {
+//                            postViewModel.commentsIsLoading = true
+//                            try await postViewModel.fetchComments()
+//                            postViewModel.commentsIsLoading = false
+//                        }
+//                    }
+//                    .contentShape(Rectangle())
+//                    .padding(.horizontal)
+//                    HStack {
+//                        Text("+ \(leaderViewModel.getUpStat(index: allDownIndex, list: .allTimeDown) ?? 0)")
+//                        Image(systemName: "arrow.down")
+//                            .fontWeight(.bold)
+//                            .foregroundStyle(Color.red)
+//                    }
+//                }
+//                .frame(maxWidth: .infinity, alignment: .center)
+//            }
         }
     }
-}
-
-#Preview {
-    LeaderView(hideTabBar: .constant(false), showPostView: .constant(false), selectedPost: .constant(nil), selectedTab: .constant(TabBarItem(iconName: "LeaderIcon", title: "LeaderBoards")))
 }

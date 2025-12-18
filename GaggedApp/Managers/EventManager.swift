@@ -31,7 +31,6 @@ class EventManager {
             "authorName" : event.authorName,
             "name" : event.name,
             "date" : timestamp,
-            "city" : try Firestore.Encoder().encode(event.city),
             "cityId" : event.cityId,
             "rsvps" : event.rsvps,
             "locationDetails" : event.locationDetails,
@@ -39,19 +38,33 @@ class EventManager {
         ])
     }
     
-    func getEvents() async throws -> [EventModel] {
+    func getEvents(from cityIds: [String]) async throws -> [EventModel] {
         
-        var events: [EventModel] = []
+        let batches = cityIds.chunked(into: 10)
         
-        let query: Query = eventsCollection.limit(to: 20)
-        let newDocs = try await query.getDocuments()
-                                        
-        for i in newDocs.documents {
-              let post = mapEvent(doc: i)
-              events.append(post)
-          }
+        print(cityIds)
         
-        return events
+        var allEvents: [EventModel] = []
+        var seen: Set<String> = []   // Avoid duplicate posts
+        
+        for batch in batches {
+            let query = eventsCollection
+                .whereField("cityId", in: (batch))
+                .limit(to: 20)
+            
+            let snapshot = try await query.getDocuments()
+            
+            for doc in snapshot.documents {
+                let event = mapEvent(doc: doc)
+                
+                // Avoid duplicates if multiple batches matched it
+                if seen.insert(event.id).inserted {
+                    allEvents.append(event)
+                }
+            }
+        }
+        
+        return allEvents
     }
     
     func getEvent(id: String) async throws -> EventModel {
@@ -90,26 +103,47 @@ class EventManager {
         return events
     }
     
-    func getEventsFromSearch(keyword: String) async throws -> [EventModel] {
+    func getEventsFromSearch(keyword: String, allEventsNearby: [EventModel]) async throws -> [EventModel] {
         
-        var events: [EventModel] = []
-        var newkeyword = keyword
-        
-        if keyword.contains(" ") {
-            newkeyword = newkeyword.replacingOccurrences(of: " ", with: "")
+        return allEventsNearby.filter { event in
+            let lower = keyword.lowercased()
+
+            // 1. Match post name
+            if event.name.lowercased().contains(lower) { return true }
+
+            // 2. Match author
+            if event.authorName.lowercased().contains(lower) { return true }
+
+            // 3. Match city names
+            let cities = CityManager.shared.getCities(ids: [event.cityId])
+            if cities.contains(where: { $0.city.lowercased().contains(lower) }) {
+                return true
+            }
+
+            return false
         }
-        
-        do {
-            let querySnapshot = try await eventsCollection.whereField("keywords", arrayContains: keyword.lowercased()).limit(to: 30).getDocuments()
-              for document in querySnapshot.documents {
-                  let newitem =  mapEvent(doc: document)
-                  events.append(newitem)
-              }
-        } catch {
-          print("Error getting documents: \(error)")
+    }
+    
+    
+    func getAllEventsNearby(cities: [String]) async throws -> [EventModel] {
+        var results: [EventModel] = []
+        var seen: Set<String> = []
+
+        let chunks = cities.chunked(into: 10)
+
+        for chunk in chunks {
+            let query = eventsCollection
+                .whereField("cityId", in: chunk)
+
+            let snapshot = try await query.getDocuments()
+            for doc in snapshot.documents {
+                let event = mapEvent(doc: doc)
+                if seen.insert(event.id).inserted {
+                    results.append(event)
+                }
+            }
         }
-        
-        return events
+        return results
     }
     
     private func mapEvent(doc: DocumentSnapshot) -> EventModel {

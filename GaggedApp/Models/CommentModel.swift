@@ -11,7 +11,6 @@ struct CommentModel: Identifiable {
     // Post or Event id
     let postId: String
     let postName: String
-    let authorName: String
     let message: String
     let authorId: String
     let createdAt: Timestamp
@@ -21,8 +20,14 @@ struct CommentModel: Identifiable {
     let isOnEvent: Bool
 }
 
-struct viewCommentModel: Identifiable {
+struct UICommentModel: Identifiable {
+    let id: String
     var comment: CommentModel
+    let author: UserModel
+}
+
+struct viewCommentModel: Identifiable {
+    var uiComment: UICommentModel
     var isExpanded: Bool
     let id: String
     let indentLayer: Int

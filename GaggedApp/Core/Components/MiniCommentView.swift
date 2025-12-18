@@ -38,5 +38,5 @@ struct MiniCommentView: View {
 }
 
 #Preview {
-    MiniCommentView(comment: CommentModel(id: "124", postId: "123", postName: "OgpostName", authorName: "Authornam", message: "This is a really nice comment", authorId: "caden", createdAt: Timestamp(date: Date()), upvotes: 2, parentCommentId: "12345", hasChildren: false, isOnEvent: false))
+    MiniCommentView(comment: CommentModel(id: "124", postId: "123", postName: "OgpostName", message: "This is a really nice comment", authorId: "caden", createdAt: Timestamp(date: Date()), upvotes: 2, parentCommentId: "12345", hasChildren: false, isOnEvent: false))
 }

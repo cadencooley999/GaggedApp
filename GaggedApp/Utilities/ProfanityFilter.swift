@@ -57,8 +57,8 @@ struct ProfanityFilter {
         }
     }
 
-    static func isUsernameClean(_ username: String, compiledPatterns: [NSRegularExpression]) -> Bool {
-        for pattern in compiledPatterns {
+    static func isUsernameClean(_ username: String) -> Bool {
+        for pattern in compileRegexPatterns(words: bannedWords) {
             let range = NSRange(username.startIndex..., in: username)
             if pattern.firstMatch(in: username, options: [], range: range) != nil {
                 return false

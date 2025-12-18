@@ -13,16 +13,13 @@ struct PostModel: Identifiable, Codable, Hashable {
     let text: String
     var name: String
     var imageUrl: String
-    var upvotes: Int
-    var downvotes: Int
     let createdAt: Timestamp
     var height: CGFloat
     let authorId: String
-    let authorName: String
     let cityIds: [String]
     var keywords: [String]
-    var upvotesThisWeek: Int
-    var lastUpvoted: Timestamp?
+    var upvotes: Int
+    var downvotes: Int
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
@@ -32,21 +29,17 @@ struct PostModel: Identifiable, Codable, Hashable {
         return lhs.id == rhs.id
     }
     
-    init(id: String, text: String, name: String, imageUrl: String, upvotes: Int, downvotes: Int, createdAt: Timestamp, authorId: String, authorName: String, height: CGFloat, cityIds: [String], keywords: [String], upvotesThisWeek: Int, lastUpvoted: Timestamp?) {
+    init(id: String, text: String, name: String, imageUrl: String, createdAt: Timestamp, authorId: String, height: CGFloat, cityIds: [String], keywords: [String], upvotes: Int, downvotes: Int) {
         self.id = id
         self.text = text
         self.name = name
         self.imageUrl = imageUrl
-        self.upvotes = upvotes
-        self.downvotes = downvotes
         self.createdAt = createdAt
         self.height = height
         self.authorId = authorId
-        self.authorName = authorName
         self.cityIds = cityIds
         self.keywords = keywords
-        self.upvotesThisWeek = upvotesThisWeek
-        self.lastUpvoted = lastUpvoted
+        self.upvotes = upvotes
+        self.downvotes = downvotes
     }
-    
 }

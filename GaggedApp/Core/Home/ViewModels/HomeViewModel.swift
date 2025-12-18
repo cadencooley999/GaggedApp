@@ -7,35 +7,79 @@
 
 import Foundation
 import SwiftUI
+import FirebaseFirestore
+import Combine
 
 @MainActor
 class HomeViewModel: ObservableObject {
     
     @Published var hasLoaded = false
-    
+    @Published var allCitiesList: [City] = []
+    @Published var citySearchText: String = ""
     @Published var postMatrix: [[PostModel]] = []
     @Published var columns: Int = 2
     @Published var isLoading: Bool = false
     
     let storageManager = StorageManager.shared
     let postManager = FirebasePostManager.shared
+    let cityManager = CityManager.shared
     
     let heights: [CGFloat] = [240, 200, 300]
     
-    func fetchPostsIfNeeded() async throws {
+    var cancellables: Set<AnyCancellable> = []
+    
+    func addSubscribers(_ recentCities: [City]) {
+        $citySearchText
+            .debounce(for: 0.05, scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                allCitiesList = searchCities(recentCities)
+            }
+            .store(in: &cancellables)
+            
+    }
+    
+    func searchCities(_ recentCities: [City]) -> [City] {
+        
+        print(recentCities.map{$0.id})
+        print(cityManager.allCities.map{$0.id}.prefix(10))
+        
+        let recentIDs = Set(recentCities.compactMap { $0.id })
+
+        guard !citySearchText.isEmpty else {
+            return cityManager.allCities.filter { !recentIDs.contains($0.id) }
+        }
+        
+        allCitiesList = cityManager.allCities.filter {
+            $0.city.lowercased().contains(citySearchText.lowercased()) ||
+             $0.state_id.lowercased().contains(citySearchText.lowercased())
+        }
+        
+        return allCitiesList
+    }
+    
+    func fetchPostsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
-        let posts = try await postManager.getPosts()
+        let posts = try await postManager.getPosts(from: cities)
 //        var posts = FirebasePostManager.shared.mockPosts
         let postLists = splitListSize(postlist: posts, columns: columns)
         postMatrix = postLists
         hasLoaded = true
     }
     
-    func fetchMorePosts() async throws {
-        let posts = try await postManager.getPosts()
+    func fetchMorePosts(cities: [String]) async throws {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            postMatrix = []
+        }
+        self.isLoading = true
+        let posts = try await postManager.getPosts(from: cities)
 //        var posts = FirebasePostManager.shared.mockPosts
         let postLists = splitListSize(postlist: posts, columns: columns)
-        postMatrix = postLists
+        print("fetching more posts")
+        withAnimation(.easeInOut(duration: 0.3)) {
+            postMatrix = postLists
+        }
+        self.isLoading = false
     }
     
     func splitListSize(postlist: [PostModel], columns: Int) -> [[PostModel]] {
@@ -61,7 +105,21 @@ class HomeViewModel: ObservableObject {
     func upvotePost(post: PostModel) {
         for i in postMatrix.indices {
             if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
-                postMatrix[i][index].upvotes += 1
+                var row = postMatrix[i][index]
+                print("in the row")
+                row.upvotes += 1
+                postMatrix[i][index] = row
+            }
+        }
+    }
+    
+    func removeUpvote(post: PostModel) {
+        for i in postMatrix.indices {
+            if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
+                var row = postMatrix[i][index]
+                print("in the row")
+                row.upvotes -= 1
+                postMatrix[i][index] = row
             }
         }
     }
@@ -69,7 +127,19 @@ class HomeViewModel: ObservableObject {
     func downvotePost(post: PostModel) {
         for i in postMatrix.indices {
             if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
-                postMatrix[i][index].upvotes += 1
+                var row = postMatrix[i][index]
+                row.downvotes += 1
+                postMatrix[i][index] = row
+            }
+        }
+    }
+    
+    func removeDownvote(post: PostModel) {
+        for i in postMatrix.indices {
+            if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
+                var row = postMatrix[i][index]
+                row.downvotes -= 1
+                postMatrix[i][index] = row
             }
         }
     }

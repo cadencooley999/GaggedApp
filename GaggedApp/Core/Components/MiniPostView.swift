@@ -80,7 +80,7 @@ import Kingfisher
 //}
 struct MiniPostView: View {
 
-    let post: PostModel
+    var post: PostModel
     let width: CGFloat?
 
     private let cornerRadius: CGFloat = 22
@@ -89,7 +89,7 @@ struct MiniPostView: View {
         ZStack {
             // Background card
             RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(.ultraThinMaterial)
+                .fill(.thinMaterial)
 
             VStack(spacing: 0) {
 
@@ -119,21 +119,21 @@ struct MiniPostView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     // VOTES
-                    HStack(spacing: 10) {
+                    HStack(spacing: 4) {
 
                         HStack(spacing: 2) {
                             Text("\(post.upvotes)")
                             Image(systemName: "arrow.up")
                                 .foregroundColor(Color.theme.darkBlue)
                         }
-                        .font(.caption.bold())
+                        .font(.subheadline.bold())
 
                         HStack(spacing: 2) {
                             Text("\(post.downvotes)")
                             Image(systemName: "arrow.down")
                                 .foregroundColor(Color.theme.darkRed)
                         }
-                        .font(.caption.bold())
+                        .font(.subheadline.bold())
 
                     }
                 }
@@ -143,15 +143,12 @@ struct MiniPostView: View {
         }
         .frame(height: post.height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .stroke(Color.theme.darkBlue.opacity(0.6), lineWidth: 2)
-        )
+//        .overlay(
+//            RoundedRectangle(cornerRadius: cornerRadius)
+//                .stroke(Color.theme.darkBlue.opacity(0.6), lineWidth: 2)
+//        )
         .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
+        .frame(maxWidth: width != nil ? width : .infinity)
+        .transition(.opacity)
     }
-}
-
-
-#Preview {
-    MiniPostView(post: PostModel(id: "1234", text: "ASDF", name: "Benjamin", imageUrl: "", upvotes: 5, downvotes: 2, createdAt: Timestamp(date: Date()), authorId: "asf", authorName: "acasdf", height: 250, cityIds: ["ASDF"], keywords: [], upvotesThisWeek: 3, lastUpvoted: Timestamp(date: Date())), width: 200)
 }

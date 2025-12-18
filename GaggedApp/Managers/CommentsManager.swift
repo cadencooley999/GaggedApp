@@ -24,7 +24,6 @@ class CommentsManager {
             "postName" : comment.postName,
             "message": comment.message,
             "authorId" : comment.authorId,
-            "authorName" : comment.authorName,
             "createdAt" : comment.createdAt,
             "upvotes" : comment.upvotes,
             "parentCommentId" : comment.parentCommentId ?? "",
@@ -35,6 +34,10 @@ class CommentsManager {
     
     func upvoteComment(commentId: String) async throws {
         try await commentCollection.document(commentId).updateData(["upvotes" : FieldValue.increment(Int64(1))])
+    }
+    
+    func removeCommentUpvote(id: String) async throws {
+        try await commentCollection.document(id).updateData(["upvotes" : FieldValue.increment(Int64(-1))])
     }
     
     func getUserComments(userId: String) async throws -> [CommentModel] {
@@ -57,7 +60,7 @@ class CommentsManager {
         try await commentRef.delete()
     }
     
-    func getComments(postId: String) async throws -> [CommentModel] {
+    func getComments(postId: String) async throws -> [UICommentModel] {
         
         var comments: [CommentModel] = []
         
@@ -71,15 +74,43 @@ class CommentsManager {
               comments.append(comment)
           }
         
+        print("COMMENTS: ", comments)
         
-        return comments
+        let uiComments = try await hydrateComments(comments)
+        
+        return uiComments
     }
+    
+    func hydrateComments(_ comments: [CommentModel]) async throws -> [UICommentModel] {
+
+        // 1. Extract unique user IDs
+        let authorIds = Array(Set(comments.map { $0.authorId }))
+        
+        // 2. Fetch all authors in batch
+        let authors = try await UserManager.shared.fetchUsers(userIds: authorIds)
+        print(authors)
+        let authorMap = Dictionary(uniqueKeysWithValues: authors.map { ($0.id, $0) })
+
+        // 3. Build hydrated UI models
+        let uiComments = comments.compactMap { comment -> UICommentModel? in
+            guard let author = authorMap[comment.authorId] else { return nil }
+
+            return UICommentModel(
+                id: comment.id,
+                comment: comment,
+                author: author
+            )
+        }
+
+        return uiComments
+    }
+
     
     func updateToParent(commentId: String) async throws {
         try await commentCollection.document(commentId).updateData(["hasChildren" : true])
     }
     
-    func getChildComments(postId: String, commentId: String) async throws -> [CommentModel] {
+    func getChildComments(postId: String, commentId: String) async throws -> [UICommentModel] {
         var comments: [CommentModel] = []
         
         let query: Query = commentCollection.whereField("postId", isEqualTo: postId).whereField("parentCommentId", isEqualTo: commentId).limit(to: 100)
@@ -92,15 +123,15 @@ class CommentsManager {
               comments.append(comment)
           }
         
+        let uiComments = try await hydrateComments(comments)
         
-        return comments
+        return uiComments
     }
     
     private func mapItem(item: QueryDocumentSnapshot) async -> CommentModel {
         
         let message = item["message"] as? String ?? "No Message"
         let authorId = item["authorId"] as? String ?? "Anonymous"
-        let authorName = item["authorName"] as? String ?? "Anonymous"
         let postId = item["postId"] as? String ?? "No Post Id"
         let postName = item["postName"] as? String ?? "Unnamed Post"
         let createdAt = item["createdAt"] as? Timestamp ?? Timestamp(date: Date())
@@ -109,7 +140,7 @@ class CommentsManager {
         let hasChildren = item["hasChildren"] as? Bool ?? false
         let isOnEvent = item["isOnEvent"] as? Bool ?? false
         
-        return CommentModel(id: item.documentID, postId: postId, postName: postName,  authorName: authorName, message: message, authorId: authorId, createdAt: createdAt, upvotes: upvotes, parentCommentId: parentCommentId, hasChildren: hasChildren, isOnEvent: isOnEvent)
+        return CommentModel(id: item.documentID, postId: postId, postName: postName, message: message, authorId: authorId, createdAt: createdAt, upvotes: upvotes, parentCommentId: parentCommentId, hasChildren: hasChildren, isOnEvent: isOnEvent)
     }
 
 }
