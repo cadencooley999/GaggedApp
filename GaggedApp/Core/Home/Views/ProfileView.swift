@@ -47,7 +47,6 @@ struct ProfileView: View {
     @State var selectedTopTab: TopTab = TopTab(title: "Posts")
     
     private let columns = [
-        GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8)
     ]
     
@@ -379,7 +378,7 @@ struct ProfileView: View {
                 }
                 LazyVGrid (columns: [GridItem(.flexible(), spacing: 8),GridItem(.flexible(), spacing: 8)], spacing: 8){
                     ForEach(vm.savedPosts) { post in
-                        MiniPostView(post: post, width: nil)
+                        MiniPostView(post: post, width: nil, stroked: nil)
                             .onTapGesture {
                                 selectedPost = post
                                 postViewModel.setPost(postSelection: post)
@@ -481,7 +480,7 @@ struct ProfileView: View {
     
     var sectionPicker: some View {
         ScrollView (.horizontal, showsIndicators: false) {
-            HStack(spacing: 20){
+            HStack(spacing: UIScreen.main.bounds.width / 20){
                 ForEach(topTabs, id: \.self) { tab in
                     VStack(spacing: 0){
                         Text(tab.title)
@@ -659,6 +658,25 @@ struct ProfileView: View {
 //
 //}
 
+func loadSequentialImages(prefix: String) -> [String] {
+    var results: [String] = []
+    var i = 1
+
+    while true {
+        let name = "\(prefix)\(i)"
+
+        // UIImage(named:) returns nil if the image doesn't exist
+        if UIImage(named: name) == nil {
+            break
+        }
+
+        results.append(name)
+        i += 1
+    }
+
+    return results
+}
+
 struct ImageOverlay: View {
     
     @EnvironmentObject var profVM: ProfileViewModel
@@ -671,9 +689,7 @@ struct ImageOverlay: View {
     @State private var newChosenAddress: String? = nil
     @Binding var showImageOverlay: Bool
     
-    private let columns = [
-        GridItem(.adaptive(minimum: 70), spacing: 16)
-    ]
+    @State var columns: [GridItem] = []
     
     var body: some View {
         ZStack {
@@ -713,19 +729,23 @@ struct ImageOverlay: View {
                     ProfilePic(address: newChosenAddress ?? imageAddress, size: 200)
                         .padding(.bottom, 24)
                     
-                    // MARK: - Grid of Options
-                    LazyVGrid(columns: columns, spacing: 20) {
-                        ForEach(addresses, id: \.self) { address in
-                            ProfilePic(address: address, size: 75)
-                                .opacity(newChosenAddress == address ? 0.6 : 1)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(newChosenAddress == address ? Color.theme.darkBlue : .clear, lineWidth: 3)
-                                )
-                                .onTapGesture {
-                                    newChosenAddress = address
-                                }
+                    HStack {
+                        Spacer()
+                        LazyVGrid(columns: columns, spacing: 20) {
+                            ForEach(addresses, id: \.self) { address in
+                                ProfilePic(address: address, size: 75)
+                                    .opacity(newChosenAddress == address ? 0.6 : 1)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(newChosenAddress == address ? Color.theme.darkBlue : .clear, lineWidth: 3)
+                                    )
+                                    .onTapGesture {
+                                        newChosenAddress = address
+                                    }
+                            }
                         }
+                        .fixedSize()
+                        Spacer()
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 10)
@@ -757,26 +777,14 @@ struct ImageOverlay: View {
             }
             .padding(.horizontal)
         }
-    }
-}
-
-
-
-func loadSequentialImages(prefix: String) -> [String] {
-    var results: [String] = []
-    var i = 1
-
-    while true {
-        let name = "\(prefix)\(i)"
-
-        // UIImage(named:) returns nil if the image doesn't exist
-        if UIImage(named: name) == nil {
-            break
+        .onAppear {
+            for _ in addresses {
+                columns.append(GridItem(.adaptive(minimum: 70), spacing: 16))
+            }
         }
-
-        results.append(name)
-        i += 1
     }
-
-    return results
 }
+
+
+
+

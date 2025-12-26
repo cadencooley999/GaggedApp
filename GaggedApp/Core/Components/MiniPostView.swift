@@ -82,6 +82,7 @@ struct MiniPostView: View {
 
     var post: PostModel
     let width: CGFloat?
+    let stroked: Bool?
 
     private let cornerRadius: CGFloat = 22
 
@@ -143,10 +144,10 @@ struct MiniPostView: View {
         }
         .frame(height: post.height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-//        .overlay(
-//            RoundedRectangle(cornerRadius: cornerRadius)
-//                .stroke(Color.theme.darkBlue.opacity(0.6), lineWidth: 2)
-//        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(Color.theme.orange, lineWidth: stroked == true ? 2 : 0)
+        )
         .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
         .frame(maxWidth: width != nil ? width : .infinity)
         .transition(.opacity)

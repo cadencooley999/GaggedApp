@@ -26,7 +26,7 @@ struct CustomTabBarView: View {
         ZStack {
             HStack {
                 Spacer()
-                ForEach(tabs, id: \.self) { tab in
+                ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
                     VStack {
                         Image(tab.iconName)
                             .resizable()
@@ -38,8 +38,13 @@ struct CustomTabBarView: View {
                     .padding(.bottom, 12)
                     .foregroundColor(selectedTab == tab ? Color.theme.black : Color.theme.gray)
                     .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        if abs(index - (tabs.firstIndex(of: selectedTab) ?? 0)) > 1 {
                             selectedTab = tab
+                        }
+                        else {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedTab = tab
+                            }
                         }
                         if selectedTab.title == "Search" {
                             searchViewFocused = true
@@ -159,7 +164,7 @@ struct TabHomeView: View {
                         HomeView(hideTabBar: $hideTabBar, showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab, postAnimation: postAnimation)
                             .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                             .tag(allTabs[0])
-                        PollsView(selectedTab: $selectedTab, hideTabBar: $hideTabBar)
+                        PollsView(selectedTab: $selectedTab, hideTabBar: $hideTabBar, selectedPost: $selectedPost, showPostView: $showPostView)
                             .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                             .tag(allTabs[1])
                         LeaderView(showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab)

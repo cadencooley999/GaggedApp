@@ -13,6 +13,8 @@ import Combine
 @MainActor
 class HomeViewModel: ObservableObject {
     
+    private let feedStore: FeedStore
+
     @Published var hasLoaded = false
     @Published var allCitiesList: [City] = []
     @Published var citySearchText: String = ""
@@ -27,6 +29,19 @@ class HomeViewModel: ObservableObject {
     let heights: [CGFloat] = [240, 200, 300]
     
     var cancellables: Set<AnyCancellable> = []
+
+    init(feedStore: FeedStore) {
+        self.feedStore = feedStore
+        bindFeedStore()
+    }
+    
+    private func bindFeedStore() {
+        feedStore.$loadedPosts
+            .sink { [weak self] posts in
+                self?.postMatrix = self?.splitListSize(postlist: posts, columns: 2) ?? []
+            }
+            .store(in: &cancellables)
+    }
     
     func addSubscribers(_ recentCities: [City]) {
         $citySearchText
@@ -60,26 +75,29 @@ class HomeViewModel: ObservableObject {
     
     func fetchPostsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
+        guard feedStore.loadedPosts.isEmpty else {return}
         let posts = try await postManager.getPosts(from: cities)
 //        var posts = FirebasePostManager.shared.mockPosts
-        let postLists = splitListSize(postlist: posts, columns: columns)
-        postMatrix = postLists
+        feedStore.loadedPosts = posts
         hasLoaded = true
     }
     
     func fetchMorePosts(cities: [String]) async throws {
         withAnimation(.easeInOut(duration: 0.3)) {
-            postMatrix = []
+            feedStore.loadedPosts = []
         }
         self.isLoading = true
         let posts = try await postManager.getPosts(from: cities)
 //        var posts = FirebasePostManager.shared.mockPosts
-        let postLists = splitListSize(postlist: posts, columns: columns)
         print("fetching more posts")
         withAnimation(.easeInOut(duration: 0.3)) {
-            postMatrix = postLists
+            feedStore.loadedPosts = posts
         }
         self.isLoading = false
+    }
+    
+    func fetchPost(postId: String) async throws -> PostModel {
+        return try await postManager.getPost(id: postId)
     }
     
     func splitListSize(postlist: [PostModel], columns: Int) -> [[PostModel]] {
@@ -103,44 +121,34 @@ class HomeViewModel: ObservableObject {
     }
     
     func upvotePost(post: PostModel) {
-        for i in postMatrix.indices {
-            if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
-                var row = postMatrix[i][index]
-                print("in the row")
-                row.upvotes += 1
-                postMatrix[i][index] = row
-            }
+        if let index = feedStore.loadedPosts.firstIndex(where: {$0.id == post.id}) {
+            var post = feedStore.loadedPosts[index]
+            post.upvotes += 1
+            feedStore.loadedPosts[index] = post
         }
     }
     
     func removeUpvote(post: PostModel) {
-        for i in postMatrix.indices {
-            if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
-                var row = postMatrix[i][index]
-                print("in the row")
-                row.upvotes -= 1
-                postMatrix[i][index] = row
-            }
+        if let index = feedStore.loadedPosts.firstIndex(where: {$0.id == post.id}) {
+            var post = feedStore.loadedPosts[index]
+            post.upvotes -= 1
+            feedStore.loadedPosts[index] = post
         }
     }
     
     func downvotePost(post: PostModel) {
-        for i in postMatrix.indices {
-            if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
-                var row = postMatrix[i][index]
-                row.downvotes += 1
-                postMatrix[i][index] = row
-            }
+        if let index = feedStore.loadedPosts.firstIndex(where: {$0.id == post.id}) {
+            var post = feedStore.loadedPosts[index]
+            post.downvotes += 1
+            feedStore.loadedPosts[index] = post
         }
     }
     
     func removeDownvote(post: PostModel) {
-        for i in postMatrix.indices {
-            if let index = postMatrix[i].firstIndex(where: {$0.id == post.id}) {
-                var row = postMatrix[i][index]
-                row.downvotes -= 1
-                postMatrix[i][index] = row
-            }
+        if let index = feedStore.loadedPosts.firstIndex(where: {$0.id == post.id}) {
+            var post = feedStore.loadedPosts[index]
+            post.downvotes -= 1
+            feedStore.loadedPosts[index] = post
         }
     }
     
@@ -153,14 +161,5 @@ class HomeViewModel: ObservableObject {
         } catch {
             print("❌ Upload failed: \(error)")
         }
-    }
-}
-
-extension HomeViewModel {
-    static func previewModel() -> HomeViewModel {
-        let vm = HomeViewModel()
-        let fakePosts: [PostModel] = FirebasePostManager.shared.mockPosts
-        vm.postMatrix = vm.splitListSize(postlist: fakePosts, columns: 2)
-        return vm
     }
 }

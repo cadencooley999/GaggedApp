@@ -16,7 +16,8 @@ final class AddPostViewModel: ObservableObject {
     
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
-
+    @AppStorage("profImageUrl") var profImageUrl = ""
+    
     @Published var pickedImage: UIImage? = nil
     @Published var imageSelection: PhotosPickerItem? = nil {
         didSet {
@@ -85,7 +86,7 @@ final class AddPostViewModel: ObservableObject {
             
             let imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
             
-            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, height: 120, cityIds: cityIds, keywords: [], upvotes: 0, downvotes: 0)
+            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, keywords: [], upvotes: 0, downvotes: 0)
             try await postManager.uploadPost(post: post)
             print("✅ Success")
             return true
@@ -95,9 +96,9 @@ final class AddPostViewModel: ObservableObject {
         }
     }
     
-    func uploadNewPoll(title: String, context: String, options: [String], cityId: String) async throws -> Bool {
+    func uploadNewPoll(title: String, context: String, options: [String], cityId: String, linkedPostId: String, linkedPostName: String) async throws -> Bool {
         do {
-            let newPoll = PollModel(id: "", authorId: userId, title: title, context: context, postId: "", optionsCount: options.count, totalVotes: 0, createdAt: Timestamp(date: Date()), cityId: cityId, keywords: [])
+            let newPoll = PollModel(id: "", authorId: userId, authorName: username, authorPicUrl: profImageUrl, title: title, context: context, linkedPostId: linkedPostId, linkedPostName: linkedPostName, optionsCount: options.count, totalVotes: 0, createdAt: Timestamp(date: Date()), cityId: cityId, keywords: [])
             var pollOptions: [PollOption] = []
             for (index, option) in options.enumerated() {
                 pollOptions.append(PollOption(id: "", text: option, voteCount: 0, index: index))

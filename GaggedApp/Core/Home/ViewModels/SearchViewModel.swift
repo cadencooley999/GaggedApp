@@ -1,199 +1,202 @@
+////
+////  SearchViewModel.swift
+////  GaggedApp
+////
+////  Created by Caden Cooley on 10/10/25.
+////
 //
-//  SearchViewModel.swift
-//  GaggedApp
-//
-//  Created by Caden Cooley on 10/10/25.
-//
-
 import Foundation
 import SwiftUI
 import Combine
 
 @MainActor
 final class SearchViewModel: ObservableObject {
-    
+
+    // MARK: - App State
     @AppStorage("hasOnboarded") var hasOnboarded = false
     @AppStorage("isLoggedIn") var isLoggedIn = false
-    
-    @Published var oneSearchText: String = ""
+
+    // MARK: - Published State
     @Published var searchText: String = ""
-    @Published var eventSearchText: String = ""
-    @Published var everythingList: [MixedType] = []
     @Published var postMatrix: [[PostModel]] = []
-    @Published var eventList: [EventModel] = []
+    @Published var pollList: [PollWithOptions] = []
     @Published var columns: Int = 2
-    @Published var allPostsNearby: [PostModel] = []
-    @Published var allEventsNearby: [EventModel] = []
-    @Published var selectedFilter: String = ""
+//    @Published var allPostsNearby: [PostModel] = []
+//    @Published var firstPostsNearby: [PostModel] = []
+//    @Published var allPollsNearby: [PollWithOptions] = []
+//    @Published var firstPollsNearby: [PollWithOptions] = []
+    @Published var selectedFilter: SearchFilter = .posts
     @Published var isLoading: Bool = false
-    
-    var cancellables = Set<AnyCancellable>()
-    
-    let postManager = FirebasePostManager.shared
-    let eventManager = EventManager.shared
 
-    let heights: [CGFloat] = [220]
+    // MARK: - Internals
+    private var cancellables = Set<AnyCancellable>()
+    private var searchTask: Task<Void, Never>?
+
+    private let postManager = FirebasePostManager.shared
+    private let pollManager = PollManager.shared
+
+    private let heights: [CGFloat] = [220]
     
+    private let feedStore: FeedStore
+
+    init(feedStore: FeedStore) {
+        self.feedStore = feedStore
+        bindFeedStore()
+    }
+    
+    private func bindFeedStore() {
+        feedStore.$loadedPosts
+            .sink { [weak self] posts in
+                self?.postMatrix = self?.splitListSize(postlist: posts, columns: 2) ?? []
+            }
+            .store(in: &cancellables)
+        
+        feedStore.$loadedPolls
+            .sink { [weak self] polls in
+                self?.pollList = polls
+            }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Subscribers
     func addSubscribers(cityIDsProvider: @escaping () -> [String]) {
+        // Listen for search text changes
         $searchText
-            .debounce(for: 0.05, scheduler: DispatchQueue.main)
+            .removeDuplicates()
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] text in
+                self?.performSearchOrDefault(cityIDsProvider: cityIDsProvider)
+            }
+            .store(in: &cancellables)
+
+        // Listen for filter changes
+        $selectedFilter
+            .removeDuplicates()
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                let cityIDs = cityIDsProvider()
-                if self.searchText == "" && self.hasOnboarded && self.isLoggedIn {
-                    Task {
-                        try await self.fetchPosts(cities: cityIDs)
-                        self.isLoading = false
-                        print("task ended")
-                    }
-                }
-                else {
-                    if allPostsNearby == [] {
-                        Task {
-                            self.allPostsNearby = try await self.postManager.getAllPostsNearby(cities: cityIDs)
-                        }
-                    }
-                    self.getPostsFromSearch(cities: cityIDs, allPosts: self.allPostsNearby)
-                }
-            }
-            .store(in: &cancellables)
-        
-        $eventSearchText
-            .debounce(for: 0.05, scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                let cityIDs = cityIDsProvider()
-                if self.eventSearchText == "" && self.hasOnboarded && self.isLoggedIn {
-                    Task {
-                        try await self.fetchEvents(cities: cityIDs)
-                    }
-                }
-                else {
-                    if allEventsNearby == [] {
-                        Task {
-                            self.allEventsNearby = try await self.eventManager.getAllEventsNearby(cities: cityIDs)
-                        }
-                    }
-                    self.getEventsFromSearch(cities: cityIDs, allEvents: self.allEventsNearby)
-                }
-            }
-            .store(in: &cancellables)
-        
-        $oneSearchText
-            .debounce(for: 0.05, scheduler: DispatchQueue.main)
-            .sink {[weak self] _ in
-                print("recieving text")
-                guard let self = self else { return }
-                let cityIDs = cityIDsProvider()
-                if self.oneSearchText != "" {
-                    Task { [weak self] in
-                        guard let self = self else { return }
-                        print("in guards")
-                        async let eventsTask: [EventModel] = self.allEventsNearby.isEmpty
-                            ? self.eventManager.getAllEventsNearby(cities: cityIDs)
-                            : self.allEventsNearby
-
-                        async let postsTask: [PostModel] = self.allPostsNearby.isEmpty
-                            ? self.postManager.getAllPostsNearby(cities: cityIDs)
-                            : self.allPostsNearby
-
-                        // Wait for BOTH
-                        self.allEventsNearby = try await eventsTask
-                        self.allPostsNearby = try await postsTask
-
-                        print("Found both")
-                        // Now searchMixed AFTER the above
-                        try await self.searchMixed(cities: cityIDs)
-                    }
-                }
+                self?.performSearchOrDefault(cityIDsProvider: cityIDsProvider)
             }
             .store(in: &cancellables)
     }
-    
-    func mixAndOrder(postList: [PostModel], eventList: [EventModel]) -> [MixedType] {
-        var newArray: [MixedType] = []
-        var posts = postList
-        var events = eventList
 
-        while !posts.isEmpty || !events.isEmpty {
-            // Add up to 2 posts
-            if !posts.isEmpty {
-                let count = min(2, posts.count)
-                newArray.append(contentsOf: posts.prefix(count).map { .post($0) })
-                posts.removeFirst(count)
+    
+    private func performSearchOrDefault(cityIDsProvider: @escaping () -> [String]) {
+        guard hasOnboarded, isLoggedIn else { return }
+
+        searchTask?.cancel()
+
+        searchTask = Task { @MainActor in
+            let cityIDs = cityIDsProvider()
+
+            if searchText.isEmpty {
+                await handleEmptySearch(cities: cityIDs)
+            } else {
+                await handleSearch(text: searchText, cities: cityIDs)
             }
 
-            // Add 1 event
-            if !events.isEmpty {
-                newArray.append(.event(events.removeFirst()))
-            }
+            isLoading = false
         }
+    }
 
-        // Optional: filter out invalid IDs
-        return newArray.filter {
-            switch $0 {
-            case .post(let p):  return !p.id.isEmpty
-            case .event(let e): return !e.id.isEmpty
+
+    // MARK: - Empty Search
+    private func handleEmptySearch(cities: [String]) async {
+        if selectedFilter == .posts {
+            if feedStore.loadedPosts.isEmpty {
+                isLoading = true
+                do {
+                    let posts = try await postManager.getPosts(from: cities)
+                    feedStore.loadedPosts = posts
+                } catch {
+                    return
+                }
+            }
+            else {
+                postMatrix = splitListSize(
+                    postlist: feedStore.loadedPosts,
+                    columns: columns
+                )
+            }
+
+        } else {
+            if feedStore.loadedPolls.isEmpty {
+                isLoading = true
+                do {
+                    let polls = try await pollManager.fetchPolls(cityIds: cities)
+                    feedStore.loadedPolls = polls
+                } catch {
+                    return
+                }
+            }
+            else {
+                pollList = feedStore.loadedPolls
             }
         }
     }
-    
-    func searchMixed(cities: [String]) async throws {
-        let searchKeyword = oneSearchText.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        print("Searching for: \(searchKeyword)")
-        
-        let searchedPosts = try await postManager.getPostsFromSearch(keyword: searchKeyword, allPostsNearby: allPostsNearby)
-        
-        let searchedEvents = try await eventManager.getEventsFromSearch(keyword: searchKeyword, allEventsNearby: allEventsNearby)
-        
-        everythingList = mixAndOrder(postList: searchedPosts, eventList: searchedEvents)
-    }
-    
-    func fetchPosts(cities: [String]) async throws {
-        let posts = try await postManager.getPosts(from: cities)
-//        var posts = FirebasePostManager.shared.mockPosts
-        let postLists = splitListSize(postlist: posts, columns: columns)
-        postMatrix = postLists
-    }
-    
-    func getPostsFromSearch(cities: [String], allPosts: [PostModel]) {
-        Task {
-            let posts = try await postManager.getPostsFromSearch(keyword: searchText, allPostsNearby: allPostsNearby)
-            postMatrix = splitListSize(postlist: posts, columns: columns)
-            
+
+    // MARK: - Active Search
+    private func handleSearch(text: String, cities: [String]) async {
+        if selectedFilter == .posts {
+            if feedStore.allPostsTriggered == false {
+                do {
+                    let allPostsNearby = try await postManager.getAllPostsNearby(cities: cities)
+                    feedStore.loadedPosts = allPostsNearby
+                    feedStore.allPostsTriggered = true
+                } catch {
+                    return
+                }
+            }
+
+            let posts = postManager.getPostsFromSearch(
+                keyword: text,
+                allPostsNearby: feedStore.loadedPosts
+            )
+
+            postMatrix = splitListSize(
+                postlist: posts,
+                columns: columns
+            )
+
+        } else {
+            if feedStore.allPollsTriggered == false {
+                do {
+                    let allPollsNearby = try await pollManager.fetchAllPollsNearby(cityIds: cities)
+                    feedStore.loadedPolls = allPollsNearby
+                    feedStore.allPollsTriggered = true
+                } catch {
+                    return
+                }
+            }
+
+            pollList = pollManager.getPollsFromSearch(
+                keyword: text,
+                allPollsNearby: feedStore.loadedPolls
+            )
         }
     }
-    
-    func fetchEvents(cities: [String]) async throws {
-        print("Fetching events in search")
-        let events = try await eventManager.getEvents(from: cities)
-        eventList = events
-    }
-    
-    func getEventsFromSearch(cities: [String], allEvents: [EventModel]) {
-        Task {
-            let events = try await eventManager.getEventsFromSearch(keyword: eventSearchText, allEventsNearby: allEventsNearby)
-            eventList = events
-        }
-    }
-    
-    func splitListSize(postlist: [PostModel], columns: Int) -> [[PostModel]] {
+
+    // MARK: - Layout
+    private func splitListSize(
+        postlist: [PostModel],
+        columns: Int
+    ) -> [[PostModel]] {
+
         guard columns > 0 else { return [] }
-        
-        var postGrid: [[PostModel]] = Array(repeating: [], count: columns)
-        var columnHeights: [Int] = Array(repeating: 0, count: columns)
-        
+
+        var grid: [[PostModel]] = Array(repeating: [], count: columns)
+        var columnHeights = Array(repeating: 0, count: columns)
+
         for post in postlist {
             var p = post
             p.height = heights.randomElement() ?? 120
-            
-            // find shortest column
-            if let minIndex = columnHeights.indices.min(by: { columnHeights[$0] < columnHeights[$1] }) {
-                postGrid[minIndex].append(p)
+
+            if let minIndex = columnHeights.indices.min(
+                by: { columnHeights[$0] < columnHeights[$1] }
+            ) {
+                grid[minIndex].append(p)
                 columnHeights[minIndex] += Int(p.height)
             }
         }
-        
-        return postGrid
+
+        return grid
     }
 }

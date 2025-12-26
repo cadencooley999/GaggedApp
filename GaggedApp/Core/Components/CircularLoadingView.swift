@@ -10,12 +10,14 @@ import SwiftUI
 
 struct CircularLoadingView: View {
     @State private var isAnimating = false
+    
+    let color: Color
 
     var body: some View {
         Circle()
             .trim(from: 0.0, to: 0.7)
             .stroke(
-                Color.theme.white,
+                color,
                 style: StrokeStyle(lineWidth: 2, lineCap: .round)
             )
             .rotationEffect(.degrees(isAnimating ? 360 : 0))

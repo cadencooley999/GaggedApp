@@ -28,11 +28,11 @@ struct GaggedAppApp: App {
     @AppStorage("hasOnboarded") var hasOnboarded = false
     @AppStorage("isLoggedIn") var isLoggedIn = false
     @AppStorage("userId") var userId = ""
-    @StateObject var homeViewModel = HomeViewModel()
+    @StateObject var homeViewModel: HomeViewModel
     @StateObject var addPostViewModel = AddPostViewModel()
     @StateObject var profileViewModel = ProfileViewModel()
     @StateObject var postViewModel = PostViewModel()
-    @StateObject var searchViewModel = SearchViewModel()
+    @StateObject var searchViewModel: SearchViewModel
 //    @StateObject var eventsViewModel = EventsViewModel()
 //    @StateObject var eventViewModel = EventViewModel()
     @StateObject var leaderViewModel = LeaderViewModel()
@@ -40,6 +40,23 @@ struct GaggedAppApp: App {
     @StateObject var settingsViewModel = SettingsViewModel()
     @StateObject var loginViewModel = LoginViewModel()
     @StateObject var locationManager = LocationManager()
+    @StateObject var pollsViewModel: PollsViewModel
+    @StateObject var feedStore = FeedStore()
+    
+    init() {
+        let feedStore = FeedStore()
+        _feedStore = StateObject(wrappedValue: feedStore)
+
+        _homeViewModel = StateObject(
+            wrappedValue: HomeViewModel(feedStore: feedStore)
+        )
+
+        _searchViewModel = StateObject(
+            wrappedValue: SearchViewModel(feedStore: feedStore)
+        )
+        
+        _pollsViewModel = StateObject(wrappedValue: PollsViewModel(feedStore: feedStore))
+    }
     
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
@@ -58,6 +75,8 @@ struct GaggedAppApp: App {
                         .environmentObject(leaderViewModel)
                         .environmentObject(settingsViewModel)
                         .environmentObject(locationManager)
+                        .environmentObject(pollsViewModel)
+                        .environmentObject(feedStore)
                 }
                 else {
                     LoginView()

@@ -21,7 +21,7 @@ struct HeaderView: View {
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var searchViewModel: SearchViewModel
-//    @EnvironmentObject var eventsViewModel: EventsViewModel
+    @EnvironmentObject var pollsViewModel: PollsViewModel
 
     @Binding var showSearchView: Bool
     @Binding var selectedTab: TabBarItem
@@ -66,14 +66,19 @@ struct HeaderView: View {
 
                 Button(action: {
                     Task {
-                        searchViewModel.allPostsNearby.removeAll()
-                        searchViewModel.allEventsNearby.removeAll()
-                        cityChoiceId = ""
-                        print("CITYCHOICEHERE", cityChoiceId)
-                        await locationManager.requestLocation()
-                        try await homeViewModel.fetchMorePosts(cities: locationManager.citiesInRange)
-//                        try await eventsViewModel.fetchMoreEvents(cities: locationManager.citiesInRange)
-                    }
+                            do {
+                                cityChoiceId = ""
+
+                                let cities = try await locationManager.requestLocation()
+                                try await homeViewModel.fetchMorePosts(cities: cities)
+                                try await pollsViewModel.getMorePolls(cityIds: cities)
+                            } catch LocationError.permissionDenied {
+                                print("User denied location permission")
+                                // show alert / fallback city
+                            } catch {
+                                print("Location failed:", error)
+                            }
+                        }
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.subheadline.bold())

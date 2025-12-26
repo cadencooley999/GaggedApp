@@ -84,7 +84,7 @@ struct ChangeUserName: View {
                             else {
                                 HStack {
                                     Spacer()
-                                    CircularLoadingView()
+                                    CircularLoadingView(color: Color.theme.white)
                                         .frame(width: 20, height: 20)
                                     Spacer()
                                 }

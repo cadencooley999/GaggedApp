@@ -77,7 +77,7 @@ struct LeaderView: View {
                 HStack {
                     ForEach(leaderViewModel.thisWeekUp) { post in
                         VStack {
-                            MiniPostView(post: post, width: 220)
+                            MiniPostView(post: post, width: 220, stroked: nil)
                                 .onTapGesture {
                                     print("Little Post Tapped")
                                     selectedPost = leaderViewModel.thisWeekUp[thisWeekIndex]
@@ -147,7 +147,7 @@ struct LeaderView: View {
                 HStack {
                     ForEach(leaderViewModel.allTimeUp) { post in
                         VStack {
-                            MiniPostView(post: post, width: 220)
+                            MiniPostView(post: post, width: 220, stroked: nil)
                                 .onTapGesture {
                                     print("Little Post Tapped")
                                     selectedPost = post
@@ -185,7 +185,7 @@ struct LeaderView: View {
                 HStack {
                     ForEach(leaderViewModel.allTimeDown) { post in
                         VStack {
-                            MiniPostView(post: post, width: 220)
+                            MiniPostView(post: post, width: 220, stroked: nil)
                                 .onTapGesture {
                                     print("Little Post Tapped")
                                     selectedPost = post

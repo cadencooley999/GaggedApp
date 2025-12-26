@@ -27,10 +27,12 @@ class FirebasePostManager {
             "text": post.text,
             "imageUrl": post.imageUrl,
             "authorId": post.authorId,
+            "authorName": post.authorName,
+            "authorPicUrl": post.authorPicUrl,
             "name" : post.name,
             "createdAt" : post.createdAt,
             "cityIds" : post.cityIds,
-            "keywords" : generateKeywords(title: post.text, name: post.name),
+            "keywords" : generateKeywords(authorName: post.authorName, subjectName: post.name, captionPrefix: post.text),
             "upvotes" : post.upvotes,
             "downvotes" : post.downvotes
         ])
@@ -73,6 +75,7 @@ class FirebasePostManager {
         let doc = try await postsCollection.document(id).getDocument()
         return mapItem(item: doc)
     }
+    
     
     func getUserPosts(uid: String) async throws -> [PostModel] {
         
@@ -127,13 +130,15 @@ class FirebasePostManager {
         return results
     }
     
-    func getPostsFromSearch(keyword: String, allPostsNearby: [PostModel]) async throws -> [PostModel] {
+    func getPostsFromSearch(keyword: String, allPostsNearby: [PostModel]) -> [PostModel] {
 
         return allPostsNearby.filter { post in
             let lower = keyword.lowercased()
             
             // 1. Match post name
             if post.name.lowercased().contains(lower) { return true }
+            
+            if post.authorName.lowercased().contains(lower) { return true }
             
             // 3. Match city names
             let cities = CityManager.shared.getCities(ids: post.cityIds)
@@ -157,35 +162,37 @@ class FirebasePostManager {
 
     func getTopUpsThisWeek(from cityIDs: [String]) async throws -> [PostModel] {
         let week = weekId()
-        
-        print("IN manager func")
-        
-        //        let snapshot = try await Firestore.firestore()
-        //            .collection("WeeklyPostStats")
-        //            .whereField("week", isEqualTo: week)
-        //            .whereField("cityIds", arrayContainsAny: Array(cityIDs.prefix(10)))
-        //            .order(by: "upvotes", descending: true)
-        //            .limit(to: 5)
-        //            .getDocuments()
-        //
-        //        let postIds = snapshot.documents.map { $0["postId"] as! String }
-        
         let chunks = cityIDs.chunked(into: 10)
-        
-        var stats: [WeeklyPostStat] = []
-        
-        for chunk in chunks {
-            let snap = try await Firestore.firestore()
-                .collection("WeeklyPostStats")
-                .whereField("week", isEqualTo: week)
-                .whereField("cityIds", arrayContainsAny: chunk)
-                .order(by: "upvotes", descending: true)
-                .limit(to: 5)
-                .getDocuments()
-            
-            stats.append(contentsOf: snap.documents.compactMap { WeeklyPostStat(doc: $0) })
+
+        let stats: [WeeklyPostStat] = try await withThrowingTaskGroup(
+            of: [WeeklyPostStat].self
+        ) { group in
+
+            for chunk in chunks {
+                group.addTask {
+                    let snap = try await Firestore.firestore()
+                        .collection("WeeklyPostStats")
+                        .whereField("week", isEqualTo: week)
+                        .whereField("cityIds", arrayContainsAny: chunk)
+                        .order(by: "upvotes", descending: true)
+                        .limit(to: 5)
+                        .getDocuments()
+
+                    return snap.documents.compactMap {
+                        WeeklyPostStat(doc: $0)
+                    }
+                }
+            }
+
+            var combined: [WeeklyPostStat] = []
+
+            for try await result in group {
+                combined.append(contentsOf: result)
+            }
+
+            return combined
         }
-        
+
         let top5 = stats
             .reduce(into: [String: WeeklyPostStat]()) { dict, stat in
                 dict[stat.postId] = max(dict[stat.postId] ?? stat, stat)
@@ -193,41 +200,50 @@ class FirebasePostManager {
             .values
             .sorted { $0.upvotes > $1.upvotes }
             .prefix(5)
-        
-        let postIds = top5.filter({$0.upvotes > 0}).compactMap({$0.postId})
-        
-        print("GOT WEEKLY UPS", postIds)
+
+        let postIds = top5
+            .filter { $0.upvotes > 0 }
+            .map { $0.postId }
 
         return try await getPostsFromIds(ids: postIds)
     }
+
     
     func getTopUpsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
         let chunks = cityIDs.chunked(into: 10)
 
-        var postMap: [String: PostModel] = [:]
+        let posts: [PostModel] = try await withThrowingTaskGroup(
+            of: [PostModel].self
+        ) { group in
 
-        for chunk in chunks {
-            let snap = try await postsCollection
-                .whereField("cityIds", arrayContainsAny: chunk)
-                .order(by: "upvotes", descending: true)
-                .limit(to: 20) // IMPORTANT: over-fetch
-                .getDocuments()
+            for chunk in chunks {
+                group.addTask {
+                    let snap = try await Firestore.firestore().collection("Posts")
+                        .whereField("cityIds", arrayContainsAny: chunk)
+                        .order(by: "upvotes", descending: true)
+                        .limit(to: 20)
+                        .getDocuments()
 
-            for doc in snap.documents {
-                let post = mapItem(item: doc)
-
-                // Deduplicate + keep highest-upvote version
-                if let existing = postMap[post.id] {
-                    if post.upvotes > existing.upvotes {
-                        postMap[post.id] = post
-                    }
-                } else {
-                    postMap[post.id] = post
+                    return snap.documents.map { self.mapItem(item: $0) }
                 }
             }
+
+            var combined: [PostModel] = []
+            for try await result in group {
+                combined.append(contentsOf: result)
+            }
+            return combined
         }
 
-        return postMap.values.filter({$0.upvotes > 0})
+        let deduped = Dictionary(
+            posts.map { ($0.id, $0) },
+            uniquingKeysWith: { a, b in
+                a.upvotes >= b.upvotes ? a : b
+            }
+        )
+
+        return deduped.values
+            .filter { $0.upvotes > 0 }
             .sorted { $0.upvotes > $1.upvotes }
             .prefix(5)
             .map { $0 }
@@ -237,34 +253,43 @@ class FirebasePostManager {
     func getTopDownsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
         let chunks = cityIDs.chunked(into: 10)
 
-        var postMap: [String: PostModel] = [:]
+        let posts: [PostModel] = try await withThrowingTaskGroup(
+            of: [PostModel].self
+        ) { group in
 
-        for chunk in chunks {
-            let snap = try await postsCollection
-                .whereField("cityIds", arrayContainsAny: chunk)
-                .order(by: "downvotes", descending: true)
-                .limit(to: 20) // IMPORTANT: over-fetch
-                .getDocuments()
+            for chunk in chunks {
+                group.addTask {
+                    let snap = try await Firestore.firestore().collection("Posts")
+                        .whereField("cityIds", arrayContainsAny: chunk)
+                        .order(by: "downvotes", descending: true)
+                        .limit(to: 20)
+                        .getDocuments()
 
-            for doc in snap.documents {
-                let post = mapItem(item: doc)
-
-                // Deduplicate + keep highest-upvote version
-                if let existing = postMap[post.id] {
-                    if post.upvotes > existing.upvotes {
-                        postMap[post.id] = post
-                    }
-                } else {
-                    postMap[post.id] = post
+                    return snap.documents.map { self.mapItem(item: $0) }
                 }
             }
+
+            var combined: [PostModel] = []
+            for try await result in group {
+                combined.append(contentsOf: result)
+            }
+            return combined
         }
 
-        return postMap.values.filter({$0.downvotes > 0})
-            .sorted { $0.upvotes > $1.upvotes }
+        let deduped = Dictionary(
+            posts.map { ($0.id, $0) },
+            uniquingKeysWith: { a, b in
+                a.downvotes >= b.downvotes ? a : b
+            }
+        )
+
+        return deduped.values
+            .filter { $0.downvotes > 0 }
+            .sorted { $0.downvotes > $1.downvotes }
             .prefix(5)
             .map { $0 }
     }
+
     
     func getUpvotedPostFromCoreData() async throws -> [PostModel] {
         let votedposts = CoreDataManager.shared.getUpvotedPosts()
@@ -280,19 +305,20 @@ class FirebasePostManager {
         let imageUrl = item["imageUrl"] as? String ?? ""
         let createdAt = item["createdAt"] as? Timestamp ?? Timestamp(date: Date())
         let authorId = item["authorId"] as? String ?? ""
+        let authorName = item["authorName"] as? String ?? ""
+        let authorPicUrl = item["authorPicUrl"] as? String ?? ""
         let keywords = item["keywords"] as? [String] ?? []
         let cityIds = item["cityIds"] as? [String] ?? []
-        let citiesData = item["cities"] as? [[String: Any]] ?? []
         let upvotes = item["upvotes"] as? Int ?? 0
         let downvotes = item["downvotes"] as? Int ?? 0
 
         print("mapping doc", id)
         
-        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, createdAt: createdAt, authorId: authorId, height: 180, cityIds: cityIds, keywords: keywords, upvotes: upvotes, downvotes: downvotes)
+        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, createdAt: createdAt, authorId: authorId, authorName: authorName, authorPicUrl: authorPicUrl, height: 180, cityIds: cityIds, keywords: keywords, upvotes: upvotes, downvotes: downvotes)
     }
     
-    func generateKeywords(title: String, name: String) -> [String] {
-        let inputs = [String(title.prefix(10)), name]
+    func generateKeywords(authorName: String, subjectName: String, captionPrefix: String) -> [String] {
+        let inputs = [authorName, subjectName, String(captionPrefix.prefix(5))]
         
         var keywords: [String] = []
         
@@ -320,6 +346,8 @@ class FirebasePostManager {
             imageUrl: "Moose",
             createdAt: Timestamp(date: Date()),
             authorId: "Caden",
+            authorName: "Caden1",
+            authorPicUrl: "ProfPic1",
             height: 20,
             cityIds: ["NYC001"],
             keywords: ["SwiftUI", "iOS", "Design"],
@@ -333,6 +361,8 @@ class FirebasePostManager {
             imageUrl: "Moose",
             createdAt: Timestamp(date: Date().addingTimeInterval(-1000)),
             authorId: "Caden",
+            authorName: "Caden1",
+            authorPicUrl: "ProfPic1",
             height: 120,
             cityIds: ["SF002", "LA003"],
             keywords: ["Firebase", "Firestore", "Backend"],

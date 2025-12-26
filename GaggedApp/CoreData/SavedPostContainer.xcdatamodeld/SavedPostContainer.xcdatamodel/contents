@@ -8,6 +8,10 @@
         <attribute name="commentId" optional="YES" attributeType="String"/>
         <attribute name="postId" optional="YES" attributeType="String"/>
     </entity>
+    <entity name="VotedPoll" representedClassName="VotedPoll" syncable="YES" codeGenerationType="class">
+        <attribute name="optionId" optional="YES" attributeType="String"/>
+        <attribute name="pollId" optional="YES" attributeType="String"/>
+    </entity>
     <entity name="VotedPost" representedClassName="VotedPost" syncable="YES" codeGenerationType="class">
         <attribute name="id" optional="YES" attributeType="String"/>
         <attribute name="isUpvoted" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>

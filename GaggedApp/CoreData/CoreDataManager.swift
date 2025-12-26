@@ -17,6 +17,7 @@ class CoreDataManager {
     private let containerName = "SavedPostContainer" // your .xcdatamodeld name
     private let savedItemName = "SavedPost"
     private let votedItemName = "VotedPost"
+    private let votedPollName = "VotedPoll"
     private let votedCommentName = "VotedComment"
     
     private let container: NSPersistentContainer
@@ -202,6 +203,50 @@ class CoreDataManager {
             } catch {
                 print("❌ Error deleting VotedPost: \(error)")
             }
+        }
+    }
+    
+    func addPollVote(pollId: String, optionId: String) {
+        let context = container.newBackgroundContext()
+        context.perform {
+
+            let newVote = VotedPoll(context: context)
+            newVote.pollId = pollId
+            newVote.optionId = optionId
+
+            do { try context.save() }
+            catch { print("❌ Error saving VotedPost: \(error)") }
+        }
+    }
+    
+    func removePollVote(pollId: String) {
+        let context = container.newBackgroundContext()
+        context.perform {
+            let request = NSFetchRequest<VotedPoll>(entityName: self.votedPollName)
+            request.predicate = NSPredicate(format: "pollId == %@", pollId)
+            request.fetchLimit = 1
+            
+            do {
+                if let vote = try context.fetch(request).first {
+                    context.delete(vote)
+                    try context.save()
+                }
+            } catch {
+                print("❌ Error deleting VotedPost: \(error)")
+            }
+        }
+    }
+    
+    func getPollChoice(pollId: String) -> String {
+        let request = NSFetchRequest<VotedPoll>(entityName: votedPollName)
+        request.predicate = NSPredicate(format: "pollId == %@", pollId)
+        request.fetchLimit = 1
+        
+        do {
+            return try viewContext.fetch(request).first?.optionId ?? ""
+        } catch {
+            print("Voted Post Not Found")
+            return ""
         }
     }
 }

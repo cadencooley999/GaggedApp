@@ -118,7 +118,7 @@ struct CityPickerView: View {
                                 }
                             } else {
                                 Task {
-                                    await locationManager.requestLocation()
+                                    try await locationManager.requestLocation()
                                 }
                             }
                         }

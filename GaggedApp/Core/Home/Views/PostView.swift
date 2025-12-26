@@ -369,8 +369,8 @@ struct PostView: View {
             HStack {
                 HStack {
                     HStack {
-                        ProfilePic(address: postViewModel.postAuthor?.imageAddress ?? "", size: 25)
-                        Text("\(postViewModel.postAuthor?.username ?? "")")
+                        ProfilePic(address: post.authorPicUrl, size: 25)
+                        Text(post.authorName)
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
@@ -378,6 +378,7 @@ struct PostView: View {
                     .scaleEffect(thingHeldId == post.id ? 0.9 : 1)
                     .onLongPressGesture {
                         withAnimation(.easeInOut(duration: 0.3)) {
+                            postViewModel.fetchPostAuthor(authorId: post.authorId)
                             showProfilePopup(user: postViewModel.postAuthor ?? nil)
                             thingHeldId = post.id
                         }

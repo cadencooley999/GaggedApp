@@ -16,8 +16,10 @@ struct AddPostView: View {
 //    @EnvironmentObject var eventsVm: EventsViewModel
     @EnvironmentObject var locationManager: LocationManager
     @StateObject var keyboard = KeyboardObserver()
+    @EnvironmentObject var pollsViewModel: PollsViewModel
     
     @Binding var showAddPostView: Bool
+    
     
     @FocusState var isCaptionFocused: Bool
     @FocusState var isNameFocused: Bool
@@ -40,16 +42,19 @@ struct AddPostView: View {
     @State private var croppedResult: UIImage? = nil
     @State var continuation: CheckedContinuation<UIImage,Never>? = nil
     @State var showSheet: Bool = false
+    @State var showPostPicker: Bool = false
+    @State var linkedPost: PostModel? = nil
     
     let nameLimit = 20
     let captionLimit = 1000
     let optionCharLimit = 40
-    let titleLimit = 100
+    let titleLimit = 50
     let contextLimit = 1000
+    
     
     private var cropSize: CGSize {
         let width = UIScreen.main.bounds.width
-        return CGSize(width: width, height: width * (5/4))
+        return CGSize(width: width, height: width * (5/4.5))
     }
     
     func requestCroppedImage() async -> UIImage {
@@ -74,6 +79,7 @@ struct AddPostView: View {
                                 .onTapGesture {
                                     UIApplication.shared.endEditing()
                                 }
+                                .clipped()
                             Divider()
                             nameSection
                                 .frame(height: 50)
@@ -138,16 +144,32 @@ struct AddPostView: View {
                                 Text("Poll question")
                                     .font(.headline)
                                 Spacer()
-                                HStack {
-                                    Text("Attach post")
-                                        .font(.body)
-                                        .foregroundColor(Color.theme.orange)
-                                    Image(systemName: "link")
-                                        .font(.body)
-                                        .foregroundColor(Color.theme.orange)
+                                if let post = linkedPost {
+                                    HStack {
+                                        Image(systemName: "xmark")
+                                            .background(Color.theme.background)
+                                            .onTapGesture {
+                                                linkedPost = nil
+                                                print("XXMAXING")
+                                            }
+                                        Text(post.name)
+                                        Image(systemName: "link")
+                                            .font(.body)
+                                    }
+                                    .foregroundColor(Color.theme.orange)
                                 }
-                                .onTapGesture {
-                                    print("attach code here")
+                                else {
+                                    HStack {
+                                        Text("Attach post")
+                                            .font(.body)
+                                            .foregroundColor(Color.theme.orange)
+                                        Image(systemName: "link")
+                                            .font(.body)
+                                            .foregroundColor(Color.theme.orange)
+                                    }
+                                    .onTapGesture {
+                                        showPostPicker = true
+                                    }
                                 }
                             }
 
@@ -290,6 +312,10 @@ struct AddPostView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         })
+        
+        .sheet(isPresented: $showPostPicker, content: {
+            PostLinker(linkedPost: $linkedPost, showPostPicker: $showPostPicker)
+        })
     }
     
     var captionSection: some View {
@@ -359,8 +385,8 @@ struct AddPostView: View {
                     .font(.body)
                     .focused($isNameFocused)
                     .onChange(of: nameText) { newValue in
-                        nameText = newValue.replacingOccurrences(of: " ", with: "")
-                        nameText = String(newValue.prefix(nameLimit))
+                        let new = newValue.replacingOccurrences(of: " ", with: "")
+                        nameText = String(new.prefix(nameLimit))
                     }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -637,7 +663,7 @@ struct AddPostView: View {
                 if let city = locationManager.selectedCity {
                     Task {
                         isLoading = true
-                        let success = try await vm.uploadNewPoll(title: pollTitle, context: pollContext, options: pollOptions, cityId: city.id)
+                        let success = try await vm.uploadNewPoll(title: pollTitle, context: pollContext, options: pollOptions, cityId: city.id, linkedPostId: linkedPost?.id ?? "", linkedPostName: linkedPost?.name ?? "")
                         withAnimation(.easeInOut) {
                             successful = success
                             print("Found success")
@@ -647,6 +673,9 @@ struct AddPostView: View {
     //                        try await homeVm.fetchMorePosts(cities: locationManager.citiesInRange)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
                                 successful = nil
+                                Task {
+                                    try await pollsViewModel.getMorePolls(cityIds: locationManager.citiesInRange)
+                                }
                                 withAnimation(.bouncy(duration: 0.2)) {
                                     showAddPostView = false
                                 }

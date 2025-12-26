@@ -117,7 +117,7 @@ struct CityPickerView2: View {
                                 }
                             } else {
                                 Task {
-                                    await locationManager.requestLocation()
+                                    try await locationManager.requestLocation()
                                 }
                             }
                         }
@@ -176,6 +176,7 @@ struct CityPickerView2: View {
         Task {
             homeViewModel.isLoading = true
             showCityPickerView = false
+            print("setting range")
             let citiesInRange = locationManager.setLocation(city)
             try await homeViewModel.fetchMorePosts(cities: citiesInRange)
             homeViewModel.isLoading = false

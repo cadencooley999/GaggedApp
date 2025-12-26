@@ -32,30 +32,31 @@ final class LeaderViewModel: ObservableObject {
     func fetchLeaderboardsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
         isLoading = true
-        let allUp = try await postManager.getTopUpsAllTime(from: cities)
-        let thisWeek = try await postManager.getTopUpsThisWeek(from: cities)
-        let allDown = try await postManager.getTopDownsAllTime(from: cities)
-        
-        allTimeUp = allUp
-        thisWeekUp = thisWeek
-        allTimeDown = allDown
+        async let allUp = postManager.getTopUpsAllTime(from: cities)
+        async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
+        async let allDown = postManager.getTopDownsAllTime(from: cities)
+
+        let (up, week, down) = try await (allUp, thisWeek, allDown)
+
+        allTimeUp = up
+        thisWeekUp = week
+        allTimeDown = down
         hasLoaded = true
         isLoading = false
     }
     
     func fetchMoreLeaderboards(cities: [String]) async throws {
         print("GEtting leaders")
-        allTimeUp = []
-        thisWeekUp = []
-        allTimeDown = []
         isLoading = true
-        let allUp = try await postManager.getTopUpsAllTime(from: cities)
-        let thisWeek = try await postManager.getTopUpsThisWeek(from: cities)
-        let allDown = try await postManager.getTopDownsAllTime(from: cities)
-        
-        allTimeUp = allUp
-        thisWeekUp = thisWeek
-        allTimeDown = allDown
+        async let allUp = postManager.getTopUpsAllTime(from: cities)
+        async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
+        async let allDown = postManager.getTopDownsAllTime(from: cities)
+
+        let (up, week, down) = try await (allUp, thisWeek, allDown)
+
+        allTimeUp = up
+        thisWeekUp = week
+        allTimeDown = down
         isLoading = false
     }
     

@@ -51,6 +51,7 @@ struct HomeView: View {
                 }
                 .refreshable {
                     Task {
+                        print(locationManager.citiesInRange)
                         try await homeViewModel.fetchMorePosts(cities: locationManager.citiesInRange)
                     }
                 }
@@ -103,7 +104,7 @@ struct HomeView: View {
             Task {
                 print(homeViewModel.hasLoaded)
                 print("HOME TASK RUN")
-                await locationManager.requestLocationIfNeeded(execute: !homeViewModel.hasLoaded)
+                try await locationManager.requestLocationIfNeeded(execute: !homeViewModel.hasLoaded)
                 try await homeViewModel.fetchPostsIfNeeded(cities: locationManager.citiesInRange)
                 homeViewModel.hasLoaded = true
             }
@@ -117,7 +118,7 @@ struct HomeView: View {
                     if homeViewModel.postMatrix.indices.contains(x) {
                         if !homeViewModel.postMatrix[x].isEmpty {
                             ForEach(homeViewModel.postMatrix[x], id: \.self) { post in
-                                MiniPostView(post: post, width: nil)
+                                MiniPostView(post: post, width: nil, stroked: nil)
                                     .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
                                     .contentShape(Rectangle())
                                     .transition(.opacity)

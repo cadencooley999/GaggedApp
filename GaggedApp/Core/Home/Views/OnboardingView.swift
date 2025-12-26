@@ -563,7 +563,7 @@ struct OnboardingView: View {
                                 }
                             } else {
                                 Task {
-                                    await locationManager.requestLocation()
+                                    try await locationManager.requestLocation()
                                 }
                             }
                         }
@@ -629,7 +629,7 @@ struct OnboardingView: View {
                             Image(systemName: "chevron.right")
                                 .font(.footnote)
                                 .opacity(0)
-                            CircularLoadingView()
+                            CircularLoadingView(color: Color.theme.white)
                                 .frame(width: 20, height: 20)
                             Image(systemName: "chevron.right")
                                 .font(.footnote)

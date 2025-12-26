@@ -10,6 +10,11 @@ import Foundation
 import SwiftUI
 import CoreLocation
 
+enum LocationError: Error {
+    case permissionDenied
+    case failed
+}
+
 @MainActor
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
    
@@ -27,8 +32,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     let cityManager = CityManager.shared
     
-    private var locationContinuation: CheckedContinuation<Void, Never>?
-    
+    private var locationContinuation: CheckedContinuation<[String], Error>?
+
     private var lastGeocodedLocation: CLLocation?
     
     private let manager = CLLocationManager()
@@ -40,46 +45,67 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
     }
     
-    func requestLocation() async {
+    func requestLocation() async throws -> [String] {
         cityChoiceId = ""
-        await withCheckedContinuation { continuation in
+
+        return try await withCheckedThrowingContinuation { continuation in
             self.locationContinuation = continuation
             manager.requestWhenInUseAuthorization()
             manager.startUpdatingLocation()
         }
     }
     
-    func requestLocationIfNeeded(execute: Bool) async {
-        guard execute else { return }
+    func requestLocationIfNeeded(execute: Bool) async throws -> [String] {
+        guard execute else { return []}
+        var cities: [String] = []
         guard cityChoiceId == "" else {
             if let selectedCity = cityManager.getCity(id: cityChoiceId) {
-                setLocation(selectedCity)
+                 cities = setLocation(selectedCity)
             }
             justGetLat = true
-            await withCheckedContinuation { continuation in
+            try await withCheckedThrowingContinuation { continuation in
                 self.locationContinuation = continuation
                 manager.requestWhenInUseAuthorization()
                 manager.startUpdatingLocation()
             }
-            return
+            return cities
         }
-
+        return []
     }
     
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        self.authorizationStatus = manager.authorizationStatus
-        
-        if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
+        authorizationStatus = manager.authorizationStatus
+
+        switch authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
             manager.startUpdatingLocation()
+
+        case .denied, .restricted:
+            locationContinuation?.resume(throwing: LocationError.permissionDenied)
+            locationContinuation = nil
+
+        default:
+            break
         }
     }
     
-    func setLocation(_ city: City) -> [String]{
+    func locationManager(
+        _ manager: CLLocationManager,
+        didFailWithError error: Error
+    ) {
+        locationContinuation?.resume(throwing: LocationError.failed)
+        locationContinuation = nil
+    }
+
+    
+    func setLocation(_ city: City) -> [String] {
         
         self.citiesInRange = cityManager.getNearbyCities(
             userLat: city.lat,
             userLng: city.lng
         )
+        
+        print("ran cities in range func")
 
         let recentCities = decodeList(from: lastCityIds)
 
@@ -113,65 +139,80 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         return citiesInRange
     }
     
-    
-    
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        
-        defer {
-            locationContinuation?.resume()
-            locationContinuation = nil
-            manager.stopUpdatingLocation()
-        }
-        
+
         guard let location = locations.last else { return }
-        
+
         userLatitude = location.coordinate.latitude
         userLongitude = location.coordinate.longitude
-        
-        guard cityChoiceId == "" else {return}
-        
-        guard justGetLat == false else {
+
+        // ─────────────────────────────
+        // JUST GET LAT MODE
+        // ─────────────────────────────
+        if justGetLat {
             justGetLat = false
+
+            locationContinuation?.resume(returning: citiesInRange)
+            locationContinuation = nil
+            manager.stopUpdatingLocation()
             return
         }
-        // Get all cities near the user
-        self.citiesInRange = cityManager.getNearbyCities(
+
+        // ─────────────────────────────
+        // CITY ALREADY CHOSEN
+        // ─────────────────────────────
+        if cityChoiceId != "" {
+            locationContinuation?.resume(returning: citiesInRange)
+            locationContinuation = nil
+            manager.stopUpdatingLocation()
+            return
+        }
+
+        // ─────────────────────────────
+        // NORMAL FLOW
+        // ─────────────────────────────
+
+        let rangeCities = cityManager.getNearbyCities(
             userLat: location.coordinate.latitude,
             userLng: location.coordinate.longitude
         )
-        
+
+        citiesInRange = rangeCities
+
         let recentCities = decodeList(from: lastCityIds)
 
-        // Get closest city (full model)
         guard
             let closestCityID = citiesInRange.first,
             let closestCity = cityManager.getCities(ids: [closestCityID]).first
-        else { return }
+        else {
+            locationContinuation?.resume(returning: citiesInRange)
+            locationContinuation = nil
+            manager.stopUpdatingLocation()
+            return
+        }
 
-        // If it's already selected, nothing to do
-        guard closestCity.id != selectedCity?.id else { return }
+        if closestCity.id != selectedCity?.id {
 
-        // If there *was* a previous selected city...
-        if let prev = selectedCity?.id, !prev.isEmpty {
+            if let prev = selectedCity?.id, !prev.isEmpty,
+               !recentCities.contains(prev) {
 
-            // ...and it was NOT already in recentCities
-            if !recentCities.contains(prev) {
                 prependString(prev, to: &lastCityIds)
-                
-                // keep only 3 items
+
                 if recentCities.count > 2 {
                     removeLastString(from: &lastCityIds)
                 }
             }
+
+            selectedCity = closestCity
+            cityChoiceId = closestCity.id
         }
 
-        // Update selected city
-        selectedCity = closestCity
-    }
-
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Location error:", error.localizedDescription)
+        // ─────────────────────────────
+        // FINAL RESUME (SUCCESS)
+        // ─────────────────────────────
+        locationContinuation?.resume(returning: citiesInRange)
+        locationContinuation = nil
+        manager.stopUpdatingLocation()
     }
     
     func prependString(_ value: String, to json: inout String) {
