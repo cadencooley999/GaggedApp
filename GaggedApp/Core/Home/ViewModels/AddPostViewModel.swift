@@ -29,6 +29,9 @@ final class AddPostViewModel: ObservableObject {
     @Published var selectedCities: [City] = []
     @Published var query: String = ""
     @Published var filteredCities: [City] = []
+    @Published var selectedTags: [TagModel] = []
+    @Published var currentNewContent: NewContent = .post
+    @Published var linkedPost: PostModel? = nil
     
     let storageManager = StorageManager.shared
     let postManager = FirebasePostManager.shared
@@ -86,9 +89,9 @@ final class AddPostViewModel: ObservableObject {
             
             let imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
             
-            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, keywords: [], upvotes: 0, downvotes: 0)
+            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, tags: selectedTags.map({$0.title}), keywords: [], upvotes: 0, downvotes: 0)
             try await postManager.uploadPost(post: post)
-            print("✅ Success")
+            UserManager.shared.addGags(userId: userId, contributionType: .post)
             return true
         } catch {
             print("❌ Failed with error: \(error.localizedDescription)")
@@ -104,6 +107,7 @@ final class AddPostViewModel: ObservableObject {
                 pollOptions.append(PollOption(id: "", text: option, voteCount: 0, index: index))
             }
             try await pollManager.addPoll(poll: newPoll, options: pollOptions)
+            UserManager.shared.addGags(userId: userId, contributionType: .poll)
             return true
         }
         catch {

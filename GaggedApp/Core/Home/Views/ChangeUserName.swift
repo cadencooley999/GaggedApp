@@ -27,7 +27,7 @@ struct ChangeUserName: View {
     
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
+            Color.white.ignoresSafeArea()
 //                .onTapGesture {
 //                    UIApplication.shared.endEditing()
 //                }
@@ -53,11 +53,23 @@ struct ChangeUserName: View {
                                 .font(.caption)
                                 .foregroundStyle(Color.theme.gray)
                             
-                            TextField("Enter new username", text: $newUsername)
-                                .padding(12)
-                                .background(Color.theme.lightGray.opacity(0.15))
-                                .cornerRadius(12)
-                                .autocapitalization(.none)
+                            HStack(spacing: 8) {
+                                Image(systemName: "tag")
+                                    .foregroundStyle(Color.theme.darkBlue)
+                                TextField("Enter new username", text: $newUsername)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .onChange(of: newUsername, {
+                                        newUsername = newUsername.replacingOccurrences(of: " ", with: "")
+                                            .replacingOccurrences(of: "\t", with: "")
+                                            .replacingOccurrences(of: "\n", with: "")
+                                        newUsername = String(newUsername.prefix(16))
+                                    })
+                            }
+                            .padding(14)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 18))
+                            .shadow(color: .black.opacity(0.08), radius: 6, y: 4)
+                            
                             if usernameDirty {
                                 Text("This username is not appropriate. Be good!")
                                     .font(.caption)
@@ -70,31 +82,19 @@ struct ChangeUserName: View {
                         Button {
                             showConfirmAlert = true
                         } label: {
-                            if !isSubmitting {
-                                Text(canChangeUsername ? "Confirm Username Change" : "Next change available in \(nextChangeText ?? "")")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        Capsule()
-                                            .fill(Color.theme.darkBlue)
-                                    )
-                            }
-                            else {
-                                HStack {
-                                    Spacer()
-                                    CircularLoadingView(color: Color.theme.white)
-                                        .frame(width: 20, height: 20)
-                                    Spacer()
+                            ZStack {
+                                if isSubmitting {
+                                    ProgressView()
+                                        .tint(Color.theme.white)
+                                } else {
+                                    Text(canChangeUsername ? "Confirm Username Change" : "Next change available in \(nextChangeText ?? "")")
+                                        .font(.headline)
+                                        .foregroundStyle(Color.theme.white)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.theme.darkBlue)
-                                )
                             }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 22))
                         }
                         .disabled(newUsername.isEmpty || isSubmitting || newUsername == currentUsername || !canChangeUsername)
                         .opacity(newUsername.isEmpty || !canChangeUsername || newUsername == currentUsername ? 0.5 : 1)
@@ -138,32 +138,37 @@ struct ChangeUserName: View {
     
     // MARK: - Header
     private var header: some View {
-        VStack (spacing: 0){
+        VStack(spacing: 0) {
             HStack {
                 Image(systemName: "chevron.left")
                     .font(.title3)
-                    .padding(.trailing, 8)
+                    .padding(8)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .glassEffect(.regular.interactive())
                     .onTapGesture {
                         UIApplication.shared.endEditing()
                         showChangeUsername = false
                     }
-                
+
                 Spacer()
-                
+
                 Text("Change Username")
                     .font(.headline)
-                
+
                 Spacer()
-                
+
+                // Placeholder for symmetry
                 Image(systemName: "chevron.left")
                     .font(.headline)
                     .opacity(0)
+                    .frame(width: 44, height: 44)
             }
             .padding(.horizontal)
-            .padding(.bottom)
-            Divider()
+            .padding(.bottom, 8)
         }
         .frame(height: 55)
+        .background(Color.white)
     }
     
     // MARK: - Submit Logic
@@ -221,3 +226,4 @@ struct ChangeUserName: View {
         return now >= sixMonthsLater
     }
 }
+

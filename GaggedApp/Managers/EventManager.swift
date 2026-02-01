@@ -9,6 +9,8 @@ import Foundation
 import SwiftUI
 import FirebaseFirestore
 
+enum EventManagerError: Error { case invalidId, invalidCityIds, documentNotFound }
+
 class EventManager {
     
     static let shared = EventManager()
@@ -40,6 +42,8 @@ class EventManager {
     
     func getEvents(from cityIds: [String]) async throws -> [EventModel] {
         
+        guard !cityIds.isEmpty else { return [] }
+        
         let batches = cityIds.chunked(into: 10)
         
         print(cityIds)
@@ -68,16 +72,22 @@ class EventManager {
     }
     
     func getEvent(id: String) async throws -> EventModel {
+        guard !id.isEmpty else { throw EventManagerError.invalidId }
         let doc = try await eventsCollection.document(id).getDocument()
+        guard doc.exists else { throw EventManagerError.documentNotFound }
         return mapEvent(doc: doc)
     }
     
     func deleteEvent(eventId: String) async throws {
-        let eventRef = eventsCollection.document(eventId)
-        try await eventRef.delete()
+        guard !eventId.isEmpty else { throw EventManagerError.invalidId }
+        let ref = eventsCollection.document(eventId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { return }
+        try await ref.delete()
     }
     
     func getUserEvents(uid: String) async throws -> [EventModel] {
+        guard !uid.isEmpty else { return [] }
         
         var events: [EventModel] = []
         
@@ -94,9 +104,12 @@ class EventManager {
     }
     
     func getEventsFromIds(ids: [String]) async throws -> [EventModel] {
+        guard !ids.isEmpty else { return [] }
         var events: [EventModel] = []
         for id in ids {
+            guard !id.isEmpty else { continue }
             let doc = try await eventsCollection.document(id).getDocument()
+            guard doc.exists else { continue }
             let newitem = mapEvent(doc: doc)
             events.append(newitem)
         }
@@ -126,6 +139,7 @@ class EventManager {
     
     
     func getAllEventsNearby(cities: [String]) async throws -> [EventModel] {
+        guard !cities.isEmpty else { return [] }
         var results: [EventModel] = []
         var seen: Set<String> = []
 
@@ -186,13 +200,21 @@ class EventManager {
     }
     
     func addRSVP(eventId: String) async throws {
-        try await eventsCollection.document(eventId).updateData([
+        guard !eventId.isEmpty else { throw EventManagerError.invalidId }
+        let ref = eventsCollection.document(eventId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw EventManagerError.documentNotFound }
+        try await ref.updateData([
             "rsvps": FieldValue.increment(Int64(1))
         ])
     }
     
     func removeRSVP(eventId: String) async throws {
-        try await eventsCollection.document(eventId).updateData([
+        guard !eventId.isEmpty else { throw EventManagerError.invalidId }
+        let ref = eventsCollection.document(eventId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw EventManagerError.documentNotFound }
+        try await ref.updateData([
             "rsvps": FieldValue.increment(Int64(-1))
         ])
     }

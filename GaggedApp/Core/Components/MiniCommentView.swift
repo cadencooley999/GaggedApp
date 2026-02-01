@@ -31,12 +31,6 @@ struct MiniCommentView: View {
                 Spacer()
             }
         }
-        .padding(.horizontal, 8)
-        .padding()
     }
     
-}
-
-#Preview {
-    MiniCommentView(comment: CommentModel(id: "124", postId: "123", postName: "OgpostName", message: "This is a really nice comment", authorId: "caden", createdAt: Timestamp(date: Date()), upvotes: 2, parentCommentId: "12345", hasChildren: false, isOnEvent: false))
 }

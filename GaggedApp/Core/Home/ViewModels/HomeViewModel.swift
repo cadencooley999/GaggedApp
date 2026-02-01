@@ -76,24 +76,35 @@ class HomeViewModel: ObservableObject {
     func fetchPostsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
         guard feedStore.loadedPosts.isEmpty else {return}
-        let posts = try await postManager.getPosts(from: cities)
-//        var posts = FirebasePostManager.shared.mockPosts
-        feedStore.loadedPosts = posts
-        hasLoaded = true
+        isLoading = true
+        defer {isLoading = false}
+        do {
+            let posts = try await postManager.getPosts(from: cities)
+    //        var posts = FirebasePostManager.shared.mockPosts
+            feedStore.loadedPosts = posts
+            hasLoaded = true
+        }
+        catch {
+            throw NetworkErrors.ErrorFetching
+        }
     }
     
+    @MainActor
     func fetchMorePosts(cities: [String]) async throws {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            feedStore.loadedPosts = []
-        }
         self.isLoading = true
-        let posts = try await postManager.getPosts(from: cities)
-//        var posts = FirebasePostManager.shared.mockPosts
-        print("fetching more posts")
-        withAnimation(.easeInOut(duration: 0.3)) {
-            feedStore.loadedPosts = posts
+        defer {self.isLoading = false}
+        do {
+            let posts = try await postManager.getPosts(from: cities)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                feedStore.loadedPosts = []
+            }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                feedStore.loadedPosts = posts
+            }
         }
-        self.isLoading = false
+        catch {
+            throw NetworkErrors.ErrorFetching
+        }
     }
     
     func fetchPost(postId: String) async throws -> PostModel {

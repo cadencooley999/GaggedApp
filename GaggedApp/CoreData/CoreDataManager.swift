@@ -8,11 +8,17 @@
 
 import Foundation
 import CoreData
-
+import SwiftUI
 
 class CoreDataManager {
     
-    static let shared = CoreDataManager()
+    static private var _shared: CoreDataManager?
+    static var shared: CoreDataManager {
+        guard let instance = _shared else {
+            fatalError("CoreDataManager not initialized. Call CoreDataManager.setup(userId:) first.")
+        }
+        return instance
+    }
     
     private let containerName = "SavedPostContainer" // your .xcdatamodeld name
     private let savedItemName = "SavedPost"
@@ -26,23 +32,70 @@ class CoreDataManager {
         container.viewContext
     }
     
-    // MARK: - Init
-    private init() {
+    private init(userId: String) {
         container = NSPersistentContainer(name: containerName)
-        container.loadPersistentStores { _, error in
+        let storeURL = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)
+            .first!
+            .appendingPathComponent("CoreData_\(userId).sqlite")
+        
+        let storeDescription = NSPersistentStoreDescription(url: storeURL)
+        container.persistentStoreDescriptions = [storeDescription]
+
+        container.loadPersistentStores { description, error in
             if let error = error {
-                print("❌ Core Data failed to load: \(error)")
+                fatalError("Error loading store: \(error)")
             }
         }
     }
     
+    // Call this once after login
+    static func setup(userId: String) {
+        _shared = CoreDataManager(userId: userId)
+    }
+    
+    static func teardown() {
+        _shared = nil
+    }
+    
+//    func detachCurrentStore(userId: String) throws {
+//        // Build the actual file URL
+//        let storeURL = FileManager.default
+//            .urls(for: .documentDirectory, in: .userDomainMask)
+//            .first!
+//            .appendingPathComponent("CoreData_\(userId).sqlite")
+//        
+//        // Find the store in memory
+//        guard let store = container.persistentStoreCoordinator.persistentStores.first(where: { $0.url == storeURL }) else {
+//            print("Store not found in memory")
+//            return
+//        }
+//
+//        // Detach the store
+//        try container.persistentStoreCoordinator.remove(store)
+//        print("Detached store for user: \(userId)")
+//    }
+    
     func getSavedPosts() -> [SavedPost] {
         let context = container.viewContext
         let request = NSFetchRequest<SavedPost>(entityName: savedItemName)
+        request.predicate = NSPredicate(format: "isPost == true")
         do {
             return try context.fetch(request)
         } catch {
             print("❌ Error fetching posts: \(error)")
+            return []
+        }
+    }
+    
+    func getSavedPolls() -> [SavedPost] {
+        let context = container.viewContext
+        let request = NSFetchRequest<SavedPost>(entityName: savedItemName)
+        request.predicate = NSPredicate(format: "isPost == false")
+        do {
+            return try context.fetch(request)
+        } catch {
+            print("❌ Error fetching polls: \(error)")
             return []
         }
     }
@@ -61,7 +114,22 @@ class CoreDataManager {
             }
         }
     }
-//    
+    
+    func savePoll(pollId: String) {
+        let context = container.newBackgroundContext()
+        context.perform {
+            let newItem = SavedPost(context: context)
+            newItem.id = pollId
+            newItem.isPost = false
+            do {
+                try context.save()
+                print("Item added")
+            } catch {
+                print("Error saving item: \(error)")
+            }
+        }
+    }
+//
 //    func saveEvent(eventId: String) {
 //        let context = container.newBackgroundContext()
 //        context.perform {
@@ -99,7 +167,6 @@ class CoreDataManager {
         let request = NSFetchRequest<VotedPost>(entityName: votedItemName)
         request.predicate = NSPredicate(format: "id == %@", id)
         request.fetchLimit = 1
-        
         do {
             return try viewContext.fetch(request).first
         } catch {

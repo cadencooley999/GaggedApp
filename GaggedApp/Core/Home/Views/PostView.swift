@@ -12,17 +12,24 @@ struct PostView: View {
     
     @AppStorage("userId") var userId = ""
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress: String = ""
-
+    @AppStorage("username") var username = ""
     
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var profileViewModel: ProfileViewModel
+    @EnvironmentObject var addPostViewModel: AddPostViewModel
+    @EnvironmentObject var windowSize: WindowSize
+    
+    @Environment(\.colorScheme) var scheme
+    
+    @State private var profileTask: Task<Void, Never>?
     
     @FocusState var isCommentTextFieldFocused: Bool
     
     @Binding var showPostView: Bool
     @Binding var showSearchView: Bool
     @Binding var hideTabBar: Bool
+    @Binding var showAddPostView: Bool
     
     @State var commentText: String = ""
     @State var shiftScroll: Bool = false
@@ -36,10 +43,14 @@ struct PostView: View {
     @State var userForDisplay: UserModel? = nil
     @State var thingHeldId: String = ""
     @State var isNamePressed: Bool = false
-
+    @State var isCommentTextFieldFocusedState: Bool = false
+    
+    @Namespace var commentBubbles
+    
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
+            Background()
+                .frame(width: windowSize.size.width, height: windowSize.size.height)
                 .onTapGesture {
                     UIApplication.shared.endEditing()
                 }
@@ -48,46 +59,52 @@ struct PostView: View {
                 ScrollViewReader { proxy in
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
-                            postImage(url: post.imageUrl, maxHeight: 450)
-                                .onTapGesture {
-                                    UIApplication.shared.endEditing()
-                                }
+                            VStack(spacing: -12){
+                                postImage(url: post.imageUrl, maxHeight: 450)
+                                    .cornerRadius(30)
+                                    .padding(.horizontal)
+                                    .padding(.top, 12)
+                                    .onTapGesture {
+                                        UIApplication.shared.endEditing()
+                                    }
+                                
+                                postInfo(for: post)
+                                    .padding(.horizontal)
+                                    .padding(.bottom)
+                                    .id("postTop")
+                                    .padding(.bottom, 4)
+                            }
                             
-                            postInfo(for: post)
-                                .padding()
-                                .id("postTop")
-                                .padding(.bottom, 4)
+                            Text("Comments")
+                                .font(.headline.weight(.medium))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal)
                             
-                            Divider()
-
                             commentSection
                                 .id("commentSectionBottom")
                                 .padding(.bottom, 32)
-
+                                .padding()
+                            
                         }
-                        .offset(y: shiftScroll ? (highlightedCommentId != nil ? -300 : -250) : 0)
                         .padding(.vertical, 55)
-                        .onChange(of: isCommentTextFieldFocused) { newValue in
-                            if newValue {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    shiftScroll = true
-                                }
-                            }
-                            else {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    shiftScroll = false
-                                }
-                            }
-                        }
                     }
                     .refreshable {
                         Task {
-                            try await postViewModel.fetchComments()
+                            try await postViewModel.refreshComments()
                         }
                     }
                     .onScrollPhaseChange { oldPhase, newPhase in
                         if newPhase == .interacting {
                             UIApplication.shared.endEditing()
+                        }
+                    }
+                    .onChange(of: highlightedCommentId) {
+                        if let id = highlightedCommentId {
+                            print(id)
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo("scrollId-\(id)", anchor: .center)
+                            }
+                            print("Scrolling too")
                         }
                     }
                 }
@@ -105,24 +122,35 @@ struct PostView: View {
             }
             
             VStack(spacing: 0){
-                header
-                    .background(Color.theme.background)
-                Divider()
+                ZStack {
+                    VStack {
+                        BackgroundHelper.shared.appleHeaderBlur.frame(height: 88)
+                        Spacer()
+                    }
+                    VStack {
+                        header
+                            .frame(height: 55)
+                        Spacer()
+                    }
+                }
                 Spacer()
-                commentBar
-                    .background(Color.theme.background)
-                    .focused($isCommentTextFieldFocused)
-            }
-            
-            if showProfilePopup {
-                if let author = userForDisplay {
-                    ProfilePopup(user: author, showProfilePopup: $showProfilePopup, thingHeldId: $thingHeldId)
+                ZStack {
+                    // Full-screen background that aligns the gradient to the bottom
+                    VStack {
+                        Spacer()
+                        BackgroundHelper.shared.appleFooterBlur.frame(height: 100)
+                    }
+                    VStack {
+                        Spacer()
+                        commentBar
+                            .focused($isCommentTextFieldFocused)
+                    }
                 }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showProfilePopup)
         .sheet(isPresented: $showOptionsSheet) {
-            OptionsSheet(selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView)
+            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.ultraThickMaterial) // or .regularMaterial
@@ -130,307 +158,386 @@ struct PostView: View {
         }
     }
     
-    
-
-        
     var header: some View {
         VStack(spacing: 0){
             HStack {
                 Image(systemName: "chevron.left")
-                    .frame(width: 50, alignment: .leading)
-                    .frame(maxHeight: .infinity)
-                    .background(Color.theme.background)
+                    .font(.title3)
+                    .padding(8)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .glassEffect(.regular.interactive())
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
+                            UIApplication.shared.endEditing()
                             showPostView = false
                             hideTabBar = false
+                            postViewModel.comments = []
                         }
-                        postViewModel.comments = []
+
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 VStack {
                     Text(postViewModel.post?.name ?? "Name")
-                        .font(.title2)
-                    HStack {
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.theme.accent)
+                    HStack(spacing: 4) {
                         ForEach(postViewModel.postCities) { city in
                             Text(city.city + ", " + city.state_id.uppercased())
                                 .italic(true)
-                                .font(.callout)
+                                .font(.caption2)
                                 .lineLimit(1)
+                                .foregroundStyle(Color.theme.gray)
                             if postViewModel.postCities.count > 1 {
                                 if city == postViewModel.postCities.first! {
                                     Text("&")
                                         .italic(true)
-                                        .font(.callout)
+                                        .font(.caption2)
+                                        .foregroundStyle(Color.theme.gray)
                                 }
                             }
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                HStack {
-                    Image("ellipses")
-                        .resizable()
-                        .frame(width: 20, height: 20)
-                        .onTapGesture {
-                            if let post = postViewModel.post {
-                                selectedItemForOptions = GenericItem.post(post)
-                                showOptionsSheet = true
+                GlassEffectContainer {
+                    HStack {
+                        Image(systemName: "chart.bar.horizontal.page")
+                            .font(.title3)
+                            .padding(8)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                            .glassEffect(.regular.interactive())
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showAddPostView = true
+                                    addPostViewModel.currentNewContent = .poll
+                                    addPostViewModel.linkedPost = postViewModel.post
+                                }
                             }
-                        }
+                        Image(systemName: "ellipsis")
+                            .font(.title3)
+                            .padding(8)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                            .glassEffect(.regular.interactive())
+                            .onTapGesture {
+                                if let post = postViewModel.post {
+                                    selectedItemForOptions = GenericItem.post(post)
+                                    showOptionsSheet = true
+                                }
+                            }
+                    }
                 }
-                .frame(maxWidth: 50, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .frame(maxWidth: .infinity)
-            .padding()
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
         }
-        .frame(height: 55)
     }
     
     var commentSection: some View {
-            VStack(spacing: 0) {
-                if postViewModel.commentsIsLoading {
-                    ProgressView()
+        LazyVStack(spacing: 0) {
+            if postViewModel.commentsIsLoading {
+                ProgressView()
+                    .padding(.top, 32)
+            }
+            else {
+                if postViewModel.comments.count == 0 {
+                    Text("No comments yet")
                         .padding(.top, 32)
+                        .foregroundColor(.gray)
+                        .font(.caption)
                 }
                 else {
-                    if postViewModel.comments.count == 0 {
-                        Text("No comments yet")
-                            .padding(.top, 32)
-                            .foregroundColor(.gray)
-                            .font(.caption)
-                    }
-                    else {
-                        ForEach(postViewModel.comments) { com in
-                            HStack(alignment: .top) {
-                                HStack(alignment: .top){
-                                    ProfilePic(address: com.uiComment.author.imageAddress, size: 25)
-                                        .scaleEffect(thingHeldId == com.uiComment.id ? 0.9 : 1)
-                                        .onLongPressGesture {
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                showProfilePopup(user: com.uiComment.author)
-                                                thingHeldId = com.uiComment.id
-                                            }
+                    GlassEffectContainer {
+                        ForEach(postViewModel.comments, id: \.id) { com in
+                            let topPadding: CGFloat = com.comment.parentCommentId.isEmpty ? 16 : -16
+                            LazyVStack {
+                                HStack(alignment: .top) {
+                                    HStack(alignment: .top){
+                                        if !(com.comment.parentCommentId == "") {
+                                            Rectangle()
+                                                .fill(Color.theme.gray.opacity(0.5))
+                                                .frame(width: 20, height: 2)
+                                                .padding(.horizontal, 8)
+                                                .padding(.top, 12)
+                                                .cornerRadius(5)
                                         }
-                                    VStack(alignment: .leading){
-                                        HStack {
-                                            Text(com.uiComment.author.username)
-                                                .font(.caption)
-                                                .scaleEffect(thingHeldId == com.uiComment.id ? 0.9 : 1)
-                                                .onLongPressGesture {
-                                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                                        showProfilePopup(user: com.uiComment.author)
-                                                        thingHeldId = com.uiComment.id
+                                        ProfilePic(address: com.comment.authorId == userId ? chosenProfileImageAddress : com.comment.authorProfPic, size: 25)
+                                            .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
+                                            .onLongPressGesture {
+                                                profileTask?.cancel()
+                                                
+                                                profileTask = Task {
+                                                    async let skeletonDelay: Void = {
+                                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                                        await MainActor.run { showProfilePopup = true }
+                                                    }()
+                                                    let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
+                                                    await MainActor.run {
+                                                        withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
                                                     }
                                                 }
-                                            Text(postViewModel.timeAgoString(from: com.uiComment.comment.createdAt))
-                                                .font(.caption)
-                                                .foregroundStyle(Color.theme.gray)
-                                        }
-                                        .padding(.bottom, 4)
-                                        (Text(com.isGrandchild
-                                              ? "@\(postViewModel.getAuthorName(id: com.uiComment.comment.parentCommentId ?? "") ?? "") "
-                                              : "").foregroundStyle(Color.blue).font(.subheadline))
-                                        + Text(com.uiComment.comment.message)
-                                            .font(.subheadline)
-                                            .foregroundStyle(Color.theme.accent)
-                                        HStack {
-                                            Image(systemName: "message")
-                                                .resizable()
-                                                .frame(width: 12, height: 12)
-                                                .foregroundStyle(Color.theme.accent)
-                                                .onTapGesture {
-                                                    parentId = com.uiComment.id
-                                                    parentAuthorName = com.uiComment.author.username
-                                                    highlightedCommentId = com.uiComment.id
-                                                    isCommentTextFieldFocused = true
-                                                }
-                                                .padding(.trailing, 8)
-                                            Image(systemName: "flag")
-                                                .resizable()
-                                                .frame(width: 12, height: 12)
-                                                .foregroundStyle(Color.theme.accent)
-                                                .onTapGesture {
-                                                    
-                                                }
-                                                .padding(.trailing, 8)
-                                            if com.uiComment.author.id == profileViewModel.userId {
-                                                Image("ellipses")
-                                                    .resizable()
-                                                    .frame(width: 12, height: 12)
-                                                    .foregroundColor(Color.theme.accent)
-                                                    .onTapGesture {
-                                                        selectedItemForOptions = GenericItem.comment(com.uiComment.comment)
-                                                        showOptionsSheet = true
+                                            }
+                                        
+                                        VStack(alignment: .leading){
+                                            HStack {
+                                                Text(com.comment.authorId == userId ? username : com.comment.authorName)
+                                                    .font(.caption)
+                                                    .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
+                                                    .onLongPressGesture {
+                                                        profileTask?.cancel()
+                                                        profileTask = Task {
+                                                            async let skeletonDelay: Void = {
+                                                                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                                                await MainActor.run { showProfilePopup = true }
+                                                            }()
+                                                            let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
+                                                            await MainActor.run {
+                                                                withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
+                                                            }
+                                                        }
                                                     }
                                                 
+                                                Text(postViewModel.timeAgoString(from: com.comment.createdAt))
+                                                    .font(.caption)
+                                                    .foregroundStyle(Color.theme.gray)
                                             }
-                                            Spacer()
+                                            .padding(.bottom, 4)
+                                            (Text(com.isGrandchild
+                                                  ? "@\(postViewModel.getAuthorName(id: com.comment.parentCommentId) ?? "") "
+                                                  : "").foregroundStyle(Color.blue).font(.subheadline))
+                                            + Text(com.comment.message)
+                                                .font(.subheadline)
+                                                .foregroundStyle(Color.theme.accent)
+                                            HStack {
+                                                Image(systemName: "message")
+                                                    .resizable()
+                                                    .frame(width: 12, height: 12)
+                                                    .foregroundStyle(Color.theme.accent)
+                                                    .onTapGesture {
+                                                        parentId = com.id
+                                                        parentAuthorName = com.comment.authorName
+                                                        highlightedCommentId = nil
+                                                        isCommentTextFieldFocused = true
+                                                        highlightedCommentId = com.id
+                                                    }
+                                                    .padding(.trailing, 8)
+                                                Image(systemName: "flag")
+                                                    .resizable()
+                                                    .frame(width: 12, height: 12)
+                                                    .foregroundStyle(Color.theme.accent)
+                                                    .onTapGesture { }
+                                                    .padding(.trailing, 8)
+                                                if com.comment.authorId == profileViewModel.userId {
+                                                    Image("ellipses")
+                                                        .resizable()
+                                                        .frame(width: 12, height: 12)
+                                                        .foregroundColor(Color.theme.accent)
+                                                        .onTapGesture {
+                                                            selectedItemForOptions = GenericItem.comment(com.comment)
+                                                            showOptionsSheet = true
+                                                        }
+                                                }
+                                                Spacer()
+                                            }
+                                            .padding(.top, 4)
                                         }
-                                        .padding(.top, 4)
                                     }
-                                }
-                                .padding(.leading, com.indentLayer > 0 ? 16 : 0)
-                                Spacer()
-                                VStack {
-                                    Image(systemName: "arrow.up")
-                                        .foregroundStyle(postViewModel.upvotedComms.contains(com.id) ? Color.theme.darkBlue : .gray)
-                                        .onTapGesture {
-                                            if postViewModel.upvotedComms.contains(com.id) {
-                                                postViewModel.removeComUpvote(comId: com.id)
-                                            } else {
-                                                postViewModel.upvoteCom(comId: com.id)
+                                    Spacer()
+                                    VStack {
+                                        Image(systemName: "arrow.up")
+                                            .foregroundStyle(postViewModel.upvotedComms.contains(com.id) ? Color.theme.darkBlue : .gray)
+                                            .onTapGesture {
+                                                if postViewModel.upvotedComms.contains(com.id) { postViewModel.removeComUpvote(comId: com.id) }
+                                                else { postViewModel.upvoteCom(comId: com.id) }
                                             }
-                                        }
-                                        .padding(.bottom, 8)
-                                    Text("\(com.uiComment.comment.upvotes)")
-                                        .font(.caption)
+                                            .padding(.bottom, 8)
+                                        Text("\(com.comment.upvotes)")
+                                            .font(.caption)
+                                    }
+                                    .padding(.top, 8)
                                 }
-                                .padding(.top, 8)
-                            }
-                            .padding(12)
-                            .background(content: {
-                                Color.theme.gray.opacity(com.id == highlightedCommentId ? 0.4 : 0.0)
-                            })
-                            if com.uiComment.comment.hasChildren && com.isExpanded == false && com.indentLayer < 1 {
-                                Text("--- View Replies ---")
-                                    .font(.caption)
-                                    .foregroundStyle(Color.theme.gray)
+                                .padding(12)
+                                if com.comment.hasChildren && com.isExpanded == false && com.comment.parentCommentId == "" {
+                                    HStack {
+                                        Rectangle()
+                                            .fill(Color.theme.gray)
+                                            .frame(width: 20, height: 0.5)
+                                        Text("View Replies")
+                                            .font(.caption)
+                                            .foregroundStyle(Color.theme.gray)
+                                        Rectangle()
+                                            .fill(Color.theme.gray)
+                                            .frame(width: 20, height: 0.5)
+                                    }
                                     .onTapGesture {
-                                        Task {
-                                            try await postViewModel.catchChildren(viewCom: com)
-                                            print("child fetched")
-                                        }
+                                        Task { try await postViewModel.catchChildren(viewCom: com) }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.bottom, 8)
+                                }
                             }
-//                            else if com.comment.hasChildren && com.isExpanded == true {
-//                                Text("--- Hide Replies ---")
-//                                    .font(.caption)
-//                                    .foregroundStyle(Color.theme.gray)
-//                                    .onTapGesture {
-//                                        postViewModel.collapseComments(viewComment: com)
-//                                    }
-//                                    .frame(maxWidth: .infinity, alignment: .center)
-//                            }
+                            .padding(8)
+                            .glassEffect(in: .rect(cornerRadius: 30))
+                            .glassEffectUnion(id: "thread-\(postViewModel.findGrandparent(comment: com))", namespace: commentBubbles)
+                            .transaction { $0.animation = nil }
+                            .compositingGroup()
+                            .shadow(color: .black.opacity(0.08), radius: 6, y: 4)
+                            .padding(.top, topPadding)
+                            .id("scrollId-\(com.id)")
                         } // foreach
-                    } // else
+                    }// Glasseffect
                 } // else
-            } // vstack
+            } // else
+        } // vstack
     } // sect
     
     var commentBar: some View {
-        VStack(spacing: 0){
-            Divider()
-            HStack(alignment: .bottom){
-                ProfilePic(address: chosenProfileImageAddress, size: 25)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                // Larger profile pic inline with the input
                 VStack {
-                    if parentAuthorName != nil {
-                        HStack {
-                            Text("Replying to @\(parentAuthorName!)")
+                    Spacer()
+                    ProfilePic(address: chosenProfileImageAddress, size: 44)
+                }
+                .padding(.bottom, 2)
+                
+                // Rounded search-like input with embedded send button
+                VStack(spacing: 4){
+                    Spacer()
+                    if let parentAuthorName = parentAuthorName {
+                        HStack(spacing: 0){
+                            Spacer()
+                            Text("replying to")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("@\(parentAuthorName)")
+                                .font(.caption)
+                                .foregroundStyle(Color.theme.lightBlue)
+                            Image(systemName: "xmark")
                                 .font(.caption)
                                 .foregroundStyle(Color.theme.gray)
-                            Image(systemName: "xmark")
-                                .font(.headline)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
                                 .onTapGesture {
+                                    self.parentAuthorName = nil
                                     parentId = nil
-                                    parentAuthorName = nil
                                     highlightedCommentId = nil
-                                    UIApplication.shared.endEditing()
                                 }
+                            Spacer()
                         }
+                        .padding(.trailing, 4)
                     }
-                    TextField("Add a comment...", text: $commentText, axis: .vertical)
-                        .focused($isCommentTextFieldFocused)
-                        .lineLimit(4)
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .foregroundColor(Color.theme.lightGray.opacity(0.5))
-                        )
+                    HStack(spacing: 8) {
+                        TextField("Add a comment...", text: $commentText, axis: .vertical)
+                            .focused($isCommentTextFieldFocused)
+                            .padding(14)
+                            .font(.subheadline)
+                            .lineLimit(4)
+                        // Send icon inside the field area
+                        Button(action: {
+                            if !commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                submitComment()
+                                highlightedCommentId = nil
+                            }
+                        }) {
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(
+                                    commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.theme.gray : Color.theme.darkBlue
+                                )
+                                .opacity(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .padding(.horizontal)
+                    }
+                    .contentShape(Rectangle())
+                    .glassEffect()
                 }
-                Image(systemName: "paperplane")
-                    .resizable()
-                    .foregroundStyle(Color.theme.lightBlue)
-                    .onTapGesture {
-                        submitComment()
-                        highlightedCommentId = nil
-                    }
-                    .frame(width: 20, height: 20)
-                    .padding(.bottom, 8)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
     }
     
     @ViewBuilder
     private func postInfo(for post: PostModel) -> some View {
         VStack {
-            HStack {
-                HStack {
-                    HStack {
-                        ProfilePic(address: post.authorPicUrl, size: 25)
-                        Text(post.authorName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .background(Color.theme.background)
-                    .scaleEffect(thingHeldId == post.id ? 0.9 : 1)
-                    .onLongPressGesture {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            postViewModel.fetchPostAuthor(authorId: post.authorId)
-                            showProfilePopup(user: postViewModel.postAuthor ?? nil)
-                            thingHeldId = post.id
-                        }
-                    }
-                    Text("•")
-                        .font(.caption)
-                    Text(postViewModel.timeAgoString(from: post.createdAt))
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    ProfilePic(address: post.authorId == userId ? chosenProfileImageAddress : post.authorPicUrl, size: 25)
+                    Text(post.authorId == userId ? username : post.authorName)
                         .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.theme.accent)
+                }
+                VStack(alignment: .leading) {
+                    Text(postViewModel.timeAgoString(from: post.createdAt))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 HStack {
                     Text("\(post.upvotes)")
-                        .font(.headline)
+                        .font(.subheadline)
                     Image(systemName: "arrow.up")
                         .foregroundStyle(Color.theme.darkBlue)
                         .font(.title3)
                         .fontWeight(postViewModel.userUpvoted ? .bold : .regular)
                         .onTapGesture {
                             if !(postViewModel.userUpvoted || postViewModel.userDownvoted){
-                                postViewModel.upvote(post: post)
-                                homeViewModel.upvotePost(post: post)
+                                // check to see if works
+                                Task {
+                                    try await postViewModel.upvote(post: post)
+                                    homeViewModel.upvotePost(post: post)
+                                }
                             }
                             else if postViewModel.userUpvoted {
-                                postViewModel.removeUpvote(post: post)
-                                homeViewModel.removeUpvote(post: post)
+                                Task {
+                                    try await postViewModel.removeUpvote(post: post)
+                                    homeViewModel.removeUpvote(post: post)
+                                }
                             }
                         }
                 }
                 HStack {
                     Text("\(post.downvotes)")
-                        .font(.headline)
+                        .font(.subheadline)
                     Image(systemName: "arrow.down")
                         .foregroundStyle(Color.theme.brightRed)
                         .font(.title3)
                         .fontWeight(postViewModel.userDownvoted ? .bold : .regular)
                         .onTapGesture {
                             if !(postViewModel.userUpvoted || postViewModel.userDownvoted){
-                                postViewModel.downvote(post: post)
-                                homeViewModel.downvotePost(post: post)
+                                Task {
+                                    try await postViewModel.downvote(post: post)
+                                    homeViewModel.downvotePost(post: post)
+                                }
                             }
                             else if postViewModel.userDownvoted {
-                                postViewModel.removeDownvote(post: post)
-                                homeViewModel.removeDownvote(post: post)
+                                Task {
+                                    try await postViewModel.removeDownvote(post: post)
+                                    homeViewModel.removeDownvote(post: post)
+                                }
                             }
                         }
                 }
             }// hstack
-            InlineExpandableText(text: post.text, limit: 200)
-                .padding(.top, 4)
+            InlineExpandableText(text: post.text, limit: 200, font: .body)
+                .padding(.top, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-
+            
         }
+        .padding()
+        .background(Material.thin.opacity(0.3))
+        .cornerRadius(30)
+        .glassEffect(in: .rect(cornerRadius: 30))
     }
     
     func submitComment() {
@@ -445,59 +552,7 @@ struct PostView: View {
                 try await postViewModel.fetchComments()
                 commentText = ""
             }
-
-        }
-    }
-    
-    func showProfilePopup(user: UserModel?) {
-        userForDisplay = user
-        showProfilePopup = true
-    }
-}
-
-struct ProfilePopup: View {
-    
-    let user: UserModel
-    @Binding var showProfilePopup: Bool
-    @Binding var thingHeldId: String
-    
-    var body: some View {
-        ZStack {
-            VStack {
-                Spacer()
-                    HStack {
-                        ProfilePic(address: user.imageAddress, size: 70)
-                        VStack {
-                            Text(user.username)
-                                .font(.headline)
-                            HStack {
-                                VStack {
-                                    Text("\(user.garma)")
-                                        .font(.body)
-                                    Text("gags")
-                                        .font(.caption)
-                                }
-                                VStack {
-                                    Text("3")
-                                        .font(.body)
-                                    Text("posts")
-                                        .font(.caption)
-                                }
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Rectangle().fill(Color.theme.background).cornerRadius(20).shadow(radius: 10))
-                Spacer()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.thinMaterial.opacity(0.5))
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                showProfilePopup = false
-                thingHeldId = ""
-            }
+            
         }
     }
 }

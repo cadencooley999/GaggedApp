@@ -9,6 +9,12 @@ import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
 
+enum ContributionType {
+    case post
+    case comment
+    case poll
+}
+
 struct AuthDataResultModel {
     let uid: String
     let email: String
@@ -18,6 +24,8 @@ struct AuthDataResultModel {
         self.email = user.email ?? ""
     }
 }
+
+enum UserManagerError: Error { case missingUserId, documentNotFound }
 
 class UserManager {
     
@@ -43,7 +51,11 @@ class UserManager {
     }
     
     func setNewProfileImage(address: String) async throws {
-        try await usersCollection.document(userId).updateData(["imageAddress": address])
+        guard !userId.isEmpty else { throw UserManagerError.missingUserId }
+        let ref = usersCollection.document(userId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw UserManagerError.documentNotFound }
+        try await ref.updateData(["imageAddress": address])
     }
     
     func createUser(user: AuthDataResultModel, usernm: String, imageAddress: String) async throws {
@@ -70,9 +82,17 @@ class UserManager {
     func signOutUser() async throws {
         do {
             try Auth.auth().signOut()
+            await MainActor.run {
+                // Clear local persisted state to avoid stale UI
+                self.userEmail = ""
+                self.userId = ""
+                self.username = ""
+                self.chosenProfileImageAddress = ""
+            }
             print("User signed out successfully")
         } catch let signOutError as NSError {
             print("Error signing out: %@", signOutError)
+            throw signOutError
         }
     }
     
@@ -95,20 +115,37 @@ class UserManager {
     }
     
     func changeUsername(newUsername: String) async throws {
-        try await usersCollection.document(userId).updateData([
+        guard !userId.isEmpty else { throw UserManagerError.missingUserId }
+        let ref = usersCollection.document(userId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw UserManagerError.documentNotFound }
+        try await ref.updateData([
             "username": newUsername,
             "lastUsernameChange": Timestamp(date: Date())
         ])
+        
+    }
+    
+    func fetchUserImageAddress(userId: String) async throws -> String {
+        guard userId != "" else {return ""}
+        do {
+            let doc = try await usersCollection.document(userId).getDocument()
+            guard doc.exists else { return "" }
+            return doc["imageAddress"] as? String ?? ""
+        }
+        catch {
+            print(error)
+            return ""
+        }
     }
 
     func lastChange() async throws -> Date? {
-        let userData = try await usersCollection.document(userId).getDocument()
-        
-        guard let last = userData["lastUsernameChange"] as? Timestamp else {
-            // Never changed before → allowed
+        guard !userId.isEmpty else { return nil }
+        let doc = try await usersCollection.document(userId).getDocument()
+        guard doc.exists else { return nil }
+        guard let last = doc["lastUsernameChange"] as? Timestamp else {
             return nil
         }
-        
         return last.dateValue()
     }
     
@@ -140,14 +177,22 @@ class UserManager {
 
         // Optional: clean up Firestore
         try await cleanupUserData(userId: user.uid)
+        
+        self.userEmail = ""
+        self.userId = ""
+        self.username = ""
+        self.chosenProfileImageAddress = ""
     }
     
     func cleanupUserData(userId: String) async throws {
+        guard !userId.isEmpty else { return }
         try await usersCollection.document(userId).delete()
     }
     
     func fetchUser(userId: String) async throws -> UserModel {
+        guard !userId.isEmpty else { throw UserManagerError.missingUserId }
         let doc = try await usersCollection.document(userId).getDocument()
+        guard doc.exists else { throw UserManagerError.documentNotFound }
         let user = mapDoc(doc)
         return user
     }
@@ -166,7 +211,7 @@ class UserManager {
                 .getDocuments()
 
             for doc in snapshot.documents {
-                if let user = try? mapDoc(doc) {
+                if doc.exists, let user = try? mapDoc(doc) {
                     users.append(user)
                 }
             }
@@ -177,7 +222,11 @@ class UserManager {
 
     
     func updateProfileImage(imageUrl: String, userId: String) async throws {
-        try await usersCollection.document(userId).updateData(["imageAddress": imageUrl])
+        guard !userId.isEmpty else { throw UserManagerError.missingUserId }
+        let ref = usersCollection.document(userId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw UserManagerError.documentNotFound }
+        try await ref.updateData(["imageAddress": imageUrl])
     }
     
     func generateKeywords(username: String) -> [String] {
@@ -212,6 +261,20 @@ class UserManager {
         print("mapping doc", id)
         
         return UserModel(id: id, username: username, garma: garma, imageAddress: imageAddress, createdAt: createdAt, keywords: keywords)
+    }
+    
+    func addGags(userId: String, contributionType: ContributionType) {
+        Task {
+            guard !userId.isEmpty else { return }
+            switch contributionType {
+            case .post:
+                try await usersCollection.document(userId).updateData(["garma": FieldValue.increment(Int64(10))])
+            case .comment:
+                try await usersCollection.document(userId).updateData(["garma": FieldValue.increment(Int64(4))])
+            case .poll:
+                try await usersCollection.document(userId).updateData(["garma": FieldValue.increment(Int64(8))])
+            }
+        }
     }
 }
 

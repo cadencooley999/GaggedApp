@@ -12,11 +12,15 @@ struct CityPickerView2: View {
     @AppStorage("lastCityIds") var lastCityIds = "[]"
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var homeViewModel: HomeViewModel
+    @EnvironmentObject var windowSize: WindowSize
     
     let dissmissable: Bool
     
     @Binding var showCityPickerView: Bool
 
+    @FocusState var isFocused: Bool
+    @State var showxmark: Bool = false
+    
     @State var recentIDs: [String] = []
     @State var recentCities: [City] = []
     
@@ -24,25 +28,55 @@ struct CityPickerView2: View {
     
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
-            ScrollView {
-                VStack {
-                    header
-                        .padding(.bottom)
+            Background()
+                .ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
                     citiesSection
                 }
-                .padding()
+                .padding(.top, 80)
+                .padding(.bottom, 100)
+            }
+            .onScrollPhaseChange({ oldPhase, newPhase in
+                if newPhase == .interacting {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isFocused = false
+                    }
+                }
+            })
+            
+            VStack {
+                ZStack {
+                    VStack {
+                        BackgroundHelper.shared.appleHeaderBlur.frame(height: 88)
+                        Spacer()
+                    }
+                    VStack {
+                        header
+                            .frame(height: 55)
+                        Spacer()
+                    }
+                }
+                Spacer()
+                ZStack {
+                    VStack { Spacer(); BackgroundHelper.shared.appleFooterBlur.frame(height: 55) }
+                    VStack { Spacer(); footer }
+                }
             }
         }
         .onChange(of: lastCityIds) { newValue in
-           recentIDs = decodeList(from: newValue)
-           recentCities = cityManager.getCities(ids: recentIDs)
+            recentIDs = decodeList(from: newValue)
+            recentCities = cityManager.getCities(ids: recentIDs)
         }
         .onAppear {
             recentIDs = decodeList(from: lastCityIds)
             recentCities = cityManager.getCities(ids: recentIDs)
             homeViewModel.addSubscribers(recentCities)
             print(lastCityIds)
+        }
+        .onChange(of: isFocused) {
+            showxmark = isFocused
         }
     }
     
@@ -51,123 +85,133 @@ struct CityPickerView2: View {
             if dissmissable {
                 Image(systemName: "chevron.left")
                     .font(.title3)
+                    .padding(8)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .glassEffect(.regular.interactive())
                     .onTapGesture {
-                        print("dissmiss")
-                        showCityPickerView = false
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCityPickerView = false
+                        }
                     }
             }
-            HStack(spacing: 8) {
-
-                Image(systemName: "magnifyingglass")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-
-                TextField("Search Cities", text: $homeViewModel.citySearchText)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                Color.theme.lightGray
-                    .opacity(0.2)
-                    .cornerRadius(16)
-            )
-            .padding(.horizontal, 8)
+            Spacer()
+            Text("City Selection")
+                .font(.headline)
+            Spacer()
+            Circle().frame(width: 44, height: 44).opacity(0)
         }
+        .padding(.horizontal)
+        .padding(.top, 24)
+        .padding(.bottom, 6)
+    }
+    
+    var footer: some View {
+        GlassEffectContainer {
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(Color.theme.darkBlue)
+                    TextField("Search Cities", text: $homeViewModel.citySearchText)
+                        .font(.body)
+                        .focused($isFocused)
+                }
+                .padding(14)
+                .contentShape(Rectangle())
+                .glassEffect()
+
+                if showxmark {
+                    Image(systemName: "xmark")
+                        .font(.headline)
+                        .frame(width: 36, height: 36)
+                        .padding(8)
+                        .contentShape(Rectangle())
+                        .glassEffect(.regular.interactive())
+                        .glassEffectTransition(.materialize)
+                        .onTapGesture { isFocused = false }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.bottom, 8)
+        .padding(.horizontal, 8)
+        .animation(.easeInOut(duration: 0.3), value: showxmark)
     }
     
     var citiesSection: some View {
-        VStack(spacing: 12) {
-            
+        VStack(spacing: 16) {
+            // Current City
             Text("Current City")
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(Color.theme.gray)
                 .padding(.horizontal)
-            
-            if let city = locationManager.selectedCity {
-                cityRow(city: city, isRecent: false)
-                    .background(
-                        Color.theme.lightGray.opacity(0.15)
-                            .cornerRadius(15)
-                    )
-            } else {
-                HStack(spacing: 0) {
 
-                    Text(locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted  ? "Change Location Permissions" : "Use Current Location")
-                        .font(.body)
-                        .foregroundStyle(Color.theme.lightBlue)
-            
-                    Spacer()
-                    
-                    Image(systemName: locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted  ? "gear" :"arrow.clockwise")
-                        .font(.subheadline.bold())
-                        .foregroundColor(Color.theme.lightBlue)
-                        .padding(8)
-                }
-                .padding(.horizontal)
-                .frame(height: 55)
-                .background(
-                    Rectangle()
-                        .fill(Color.theme.background.opacity(0.001))
-                        .onTapGesture {
-                            if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
-                                if let url = URL(string: UIApplication.openSettingsURLString) {
-                                    UIApplication.shared.open(url)
-                                }
-                            } else {
-                                Task {
-                                    try await locationManager.requestLocation()
+            VStack(spacing: 0) {
+                if let city = locationManager.selectedCity {
+                    cityRow(city: city, isRecent: false)
+                } else {
+                    HStack(spacing: 0) {
+                        Text(locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted  ? "Change Location Permissions" : "Use Current Location")
+                            .font(.body)
+                            .foregroundStyle(Color.theme.darkBlue)
+                        Spacer()
+                        Image(systemName: locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted  ? "gear" :"arrow.clockwise")
+                            .font(.subheadline.bold())
+                            .foregroundColor(Color.theme.darkBlue)
+                            .padding(8)
+                    }
+                    .padding(.horizontal)
+                    .frame(height: 55)
+                    .background(
+                        Rectangle()
+                            .fill(Color.clear)
+                            .onTapGesture {
+                                if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
+                                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                                        UIApplication.shared.open(url)
+                                    }
+                                } else {
+                                    Task { try await locationManager.requestLocation() }
                                 }
                             }
-                        }
-                )
-                .background(
-                    Color.theme.lightGray.opacity(0.15)
-                        .cornerRadius(15)
-                )
+                    )
+                }
             }
+            .glassEffect(in: .rect(cornerRadius: 30))
+            .padding(.horizontal)
 
-            // Title
+            // Select New City
             Text("Select New City")
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(Color.theme.gray)
                 .padding(.horizontal)
 
             LazyVStack(spacing: 0) {
-
-                // Recent Cities
+                // Recent Cities first if search empty
                 if homeViewModel.citySearchText == "" {
-                    ForEach(recentCities.filter {$0.id != locationManager.selectedCity?.id}) { city in
+                    ForEach(recentCities.filter { $0.id != locationManager.selectedCity?.id }) { city in
                         cityRow(city: city, isRecent: true)
-                            .onTapGesture {
-                                cityTapped(city: city)
-                            }
-                        Divider()
+                            .onTapGesture { cityTapped(city: city) }
+                        Divider().padding(.leading, 16)
                     }
                 }
 
-                // All Cities minus recent
-                ForEach(homeViewModel.allCitiesList.filter{$0.id != locationManager.selectedCity?.id }) { city in
+                // All Cities minus current
+                ForEach(homeViewModel.allCitiesList.filter { $0.id != locationManager.selectedCity?.id }) { city in
                     if recentIDs.contains(city.id) {
                         cityRow(city: city, isRecent: true)
-                            .onTapGesture {
-                                cityTapped(city: city)
-                            }
-                    }
-                    else  {
+                            .onTapGesture { cityTapped(city: city) }
+                    } else {
                         cityRow(city: city, isRecent: false)
-                            .onTapGesture {
-                                cityTapped(city: city)
-                            }
+                            .onTapGesture { cityTapped(city: city) }
                     }
-                    if city.id != homeViewModel.allCitiesList.last?.id { Divider() }
+                    if city.id != homeViewModel.allCitiesList.last?.id { Divider().padding(.leading, 16) }
                 }
             }
-            .background(
-                Color.theme.lightGray.opacity(0.15)
-                    .cornerRadius(15)
-            )
+            .glassEffect(in: .rect(cornerRadius: 30))
+            .padding(.horizontal)
         }
     }
     
@@ -255,3 +299,4 @@ struct CityPickerView2: View {
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 }
+

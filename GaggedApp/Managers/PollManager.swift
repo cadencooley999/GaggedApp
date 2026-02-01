@@ -8,6 +8,8 @@
 import Foundation
 import FirebaseFirestore
 
+enum PollManagerError: Error { case invalidId, invalidCityIds, documentNotFound }
+
 class PollManager {
     static let shared = PollManager()
     
@@ -52,7 +54,16 @@ class PollManager {
         try await batch.commit()
     }
     
+    func deletePoll(pollId: String) async throws {
+        guard !pollId.isEmpty else { throw PollManagerError.invalidId }
+        let ref = pollCollection.document(pollId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { return }
+        try await ref.delete()
+    }
+    
     func fetchPolls(cityIds: [String]) async throws -> [PollWithOptions] {
+        guard !cityIds.isEmpty else { return [] }
         print("Fetching Polls (chunked)")
 
         let chunks = cityIds.chunked(into: 10)
@@ -86,6 +97,7 @@ class PollManager {
     }
     
     func fetchAllPollsNearby(cityIds: [String]) async throws -> [PollWithOptions] {
+        guard !cityIds.isEmpty else { return [] }
         print("Fetching Polls (chunked)")
 
         let chunks = cityIds.chunked(into: 10)
@@ -118,8 +130,11 @@ class PollManager {
     }
     
     func fetchPollOptions(pollId: String) async throws -> [PollOption] {
-        let snapshot = try await pollCollection
-            .document(pollId)
+        guard !pollId.isEmpty else { return [] }
+        let ref = pollCollection.document(pollId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { return [] }
+        let snapshot = try await ref
             .collection("options")
             .order(by: "index")
             .getDocuments()
@@ -158,18 +173,76 @@ class PollManager {
     }
     
     func addPollVote(pollId: String, optionId: String) async throws {
-        try await pollCollection.document(pollId).updateData(["totalVotes":FieldValue.increment(Int64(1))])
-        try await pollCollection.document(pollId).collection("options").document(optionId).updateData(["voteCount" : FieldValue.increment(Int64(1))])
+        guard !pollId.isEmpty, !optionId.isEmpty else { throw PollManagerError.invalidId }
+        let pollRef = pollCollection.document(pollId)
+        let pollSnap = try await pollRef.getDocument()
+        guard pollSnap.exists else { throw PollManagerError.documentNotFound }
+        let optionRef = pollRef.collection("options").document(optionId)
+        let optionSnap = try await optionRef.getDocument()
+        guard optionSnap.exists else { throw PollManagerError.documentNotFound }
+        try await pollRef.updateData(["totalVotes":FieldValue.increment(Int64(1))])
+        try await optionRef.updateData(["voteCount" : FieldValue.increment(Int64(1))])
     }
     
     func removePollVote(pollId: String, optionId: String) async throws {
-        try await pollCollection.document(pollId).updateData(["totalVotes":FieldValue.increment(Int64(-1))])
-        try await pollCollection.document(pollId).collection("options").document(optionId).updateData(["voteCount" : FieldValue.increment(Int64(-1))])
+        guard !pollId.isEmpty, !optionId.isEmpty else { throw PollManagerError.invalidId }
+        let pollRef = pollCollection.document(pollId)
+        let pollSnap = try await pollRef.getDocument()
+        guard pollSnap.exists else { throw PollManagerError.documentNotFound }
+        let optionRef = pollRef.collection("options").document(optionId)
+        let optionSnap = try await optionRef.getDocument()
+        guard optionSnap.exists else { throw PollManagerError.documentNotFound }
+        try await pollRef.updateData(["totalVotes":FieldValue.increment(Int64(-1))])
+        try await optionRef.updateData(["voteCount" : FieldValue.increment(Int64(-1))])
     }
     
     func switchVote(pollId: String, oldOptionId: String, newOptionId: String) async throws {
-        try await pollCollection.document(pollId).collection("options").document(oldOptionId).updateData(["voteCount":FieldValue.increment(Int64(-1))])
-        try await pollCollection.document(pollId).collection("options").document(newOptionId).updateData(["voteCount":FieldValue.increment(Int64(1))])
+        guard !pollId.isEmpty, !oldOptionId.isEmpty, !newOptionId.isEmpty else { throw PollManagerError.invalidId }
+        let pollRef = pollCollection.document(pollId)
+        let pollSnap = try await pollRef.getDocument()
+        guard pollSnap.exists else { throw PollManagerError.documentNotFound }
+        let oldRef = pollRef.collection("options").document(oldOptionId)
+        let newRef = pollRef.collection("options").document(newOptionId)
+        let oldSnap = try await oldRef.getDocument()
+        let newSnap = try await newRef.getDocument()
+        guard oldSnap.exists, newSnap.exists else { throw PollManagerError.documentNotFound }
+        try await oldRef.updateData(["voteCount":FieldValue.increment(Int64(-1))])
+        try await newRef.updateData(["voteCount":FieldValue.increment(Int64(1))])
+    }
+    
+    func getUserPolls(uid: String) async throws -> [PollWithOptions] {
+        guard !uid.isEmpty else { return [] }
+        
+        var polls: [PollWithOptions] = []
+        
+        let query: Query = pollCollection.whereField("authorId", isEqualTo: uid).order(by: "createdAt", descending: true).limit(to: 20)
+        let newDocs = try await query.getDocuments()
+        
+        for i in newDocs.documents {
+            var pollWithOptions = PollWithOptions(poll: mapPoll(document: i), options: [])
+            polls.append(pollWithOptions)
+        }
+        
+        return polls
+        
+    }
+    
+    func getPollsFromIds(ids: [String]) async throws -> [PollWithOptions] {
+        guard !ids.isEmpty else { return [] }
+        var results: [PollWithOptions] = []
+        let chunks = ids.chunked(into: 10)
+
+        for chunk in chunks {
+            let snapshot = try await pollCollection
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+
+            for doc in snapshot.documents { // QueryDocumentSnapshot
+                let poll = mapPoll(document: doc) // use the QueryDocumentSnapshot overload
+                results.append(PollWithOptions(poll: poll, options: []))
+            }
+        }
+        return results
     }
 
     func mapPoll(document: QueryDocumentSnapshot) -> PollModel {
@@ -215,3 +288,4 @@ class PollManager {
         return keywords
     }
 }
+

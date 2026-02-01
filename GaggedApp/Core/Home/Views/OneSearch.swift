@@ -18,6 +18,7 @@ struct OneSearch: View {
     @EnvironmentObject var searchViewModel: SearchViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var windowSize: WindowSize
 //    @EnvironmentObject var eventViewModel: EventViewModel
     
     @Binding var hideTabBar: Bool
@@ -26,14 +27,22 @@ struct OneSearch: View {
     @Binding var showEventView: Bool
     @Binding var selectedPost: PostModel?
     @Binding var searchViewFocused: Bool
+    @Binding var showSearchBar: Bool
     @FocusState var isFocused: Bool
     
+    @State var showxmark: Bool = false
+    
+    var isSearchTab: Bool {
+        selectedTab.title == "Search"
+    }
+    
     @Namespace private var segmentedSwitch
+    @Namespace var searchBar
     
     var body: some View {
         ZStack {
-            Color.theme.background
-                .ignoresSafeArea()
+            Background()
+                .frame(maxWidth: windowSize.size.width, maxHeight: windowSize.size.height)
             if searchViewModel.isLoading {
                 CircularLoadingView(color: Color.theme.darkBlue)
                     .frame(width: 30, height: 30)
@@ -41,89 +50,99 @@ struct OneSearch: View {
             ScrollView {
                 VStack {
                     contentFeed(currentFilter: searchViewModel.selectedFilter)
-                        .opacity(searchViewModel.isLoading ? 0 : 1)
                 }
-                .padding(.top, 115)
+                .padding(.top, 160)
+                .padding(.bottom, 100)
             }
             .onScrollPhaseChange({ oldPhase, newPhase in
                 if newPhase == .interacting {
-                    UIApplication.shared.endEditing()
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isFocused = false
+                    }
                 }
             })
-            VStack(spacing: 0){
-                header
-                    .frame(height: 55)
-                    .background(.regularMaterial)
+            if isSearchTab {
+                VStack {
+                    header
+                        .frame(height: 55)
+                        .padding(.top, 55)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                isFocused = true
+                            }
+                        }
+                    Spacer()
+                }
+                .transition(.opacity)
+            }
+            VStack {
                 segmentedController
-                    .padding(.top, 8)
+                    .padding(.top, 215)
                     .frame(height: 55)
                 Spacer()
             }
         }
-        .edgesIgnoringSafeArea(.bottom)
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.width > 80 { // left swipe
-                        UIApplication.shared.endEditing()
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedTab = TabBarItem(iconName: "LeaderIcon", title: "LeaderBoard")
-                        }
-                        searchViewModel.searchText = ""
-                    }
-                }
-        )
         .task {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: {
                 searchViewModel.addSubscribers {
                     locationManager.citiesInRange
                 }
-                isFocused = true
             })
         }
-        .onChange(of: isFocused, perform: { isFocused in
-            dismissKeyboard(isFocused: isFocused)
-        })
-    }
-    
-    func dismissKeyboard(isFocused: Bool) {
-        if isFocused {
-            hideTabBar = true
-        }
-        else {
-            hideTabBar = false
-        }
+        .animation(.easeInOut(duration: 0.3), value: isSearchTab)
     }
     
     var header: some View {
-        VStack(spacing: 0){
-            HStack {
-                Image(systemName: "chevron.left")
-                    .font(.headline)
-                    .foregroundStyle(Color.theme.darkBlue)
-                    .onTapGesture {
-                        print("CHEV TAPPED")
-                        UIApplication.shared.endEditing()
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedTab = TabBarItem(iconName: "LeaderIcon", title: "LeaderBoard")
+        VStack(spacing: 0) {
+            GlassEffectContainer {
+                HStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(Color.theme.darkBlue)
+                        TextField("Search by name, author, tags...", text: $searchViewModel.searchText)
+                            .focused($isFocused)
+                        if !searchViewModel.searchText.isEmpty {
+                            Button {
+                                searchViewModel.searchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Color.theme.gray)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        searchViewModel.searchText = ""
                     }
-                    .padding(.horizontal)
-                Spacer()
-                TextField("Search posts, polls, people...", text: $searchViewModel.searchText)
-                    .focused($isFocused)
-                    .onChange(of: isFocused) { shouldFocus in
-                        searchViewFocused = shouldFocus
+                    .padding(14)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isFocused = true
                     }
-                    .onChange(of: searchViewFocused) { searchViewFocused in
-                        isFocused = searchViewFocused
+                    .glassEffect()
+                    .glassEffectID("bar", in: searchBar)
+                    .glassEffectTransition(.materialize)
+                    
+                    if showxmark {
+                        Image(systemName: "xmark")
+                            .font(.headline)
+                            .frame(width: 36, height: 36)
+                            .padding(8)
+                            .contentShape(Rectangle())
+                            .glassEffect()
+                            .glassEffectID("xmark", in: searchBar)
+                            .glassEffectTransition(.matchedGeometry)
+                            .onTapGesture {
+                                isFocused = false
+                            }
                     }
+                }
+                .onChange(of: isFocused) {
+                    showxmark = isFocused
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
             }
-            .padding()
-            Divider()
+            .animation(.easeInOut(duration: 0.3), value: showxmark)
         }
-
     }
     
     var segmentedController: some View {
@@ -145,12 +164,8 @@ struct OneSearch: View {
                 }
             }
         }
-        .padding(6)
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Material.thick)
-//                .fill(Color.theme.lightGray.opacity(0.15))
-        )
+        .padding(2)
+        .glassEffect()
         .padding(.horizontal)
     }
 
@@ -214,17 +229,53 @@ struct OneSearch: View {
         ZStack {
             if currentFilter == .posts {
                 postFeed
+                    .background(            ZStack {
+                        Color(uiColor: .systemBackground)
+
+                        Image("noise")
+                            .resizable()
+                            .scaledToFill()
+                            .blendMode(.overlay)
+                    }
+                    .ignoresSafeArea()
+                    .overlay(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.06),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    ))
             }
             else {
                 pollFeed
+                    .background(            ZStack {
+                        Color(uiColor: .systemBackground)
+
+                        Image("noise")
+                            .resizable()
+                            .scaledToFill()
+                            .blendMode(.overlay)
+                    }
+                    .ignoresSafeArea()
+                    .overlay(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.06),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    ))
             }
         }
-        .animation(.easeInOut(duration: 0.1), value: currentFilter)
     }
     
     var postFeed: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
             HStack {
                 ForEach(0..<searchViewModel.columns) { x in
                     VStack {
@@ -234,6 +285,7 @@ struct OneSearch: View {
                                     MiniPostView(post: post, width: nil, stroked: nil)
                                         .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
                                         .contentShape(Rectangle())
+                                        .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
                                         .transition(.opacity)
                                         .onTapGesture {
                                             print("Little Post Tapped")
@@ -257,18 +309,22 @@ struct OneSearch: View {
             }
 
         }
+        .padding(.horizontal)
     }
     
     var pollFeed: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
             VStack {
                 ForEach(searchViewModel.pollList, id: \.poll.id) { poll in
                     PollCard(poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView)
+                        .contentShape(Rectangle())
+                        .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
                         .padding(.bottom)
+                        
                 }
             }
         }
+        .padding(.horizontal)
     }
 }
 

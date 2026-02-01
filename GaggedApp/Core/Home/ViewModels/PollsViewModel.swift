@@ -20,7 +20,6 @@ class PollsViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     
     let pollManager = PollManager.shared
-    let coreDataManager = CoreDataManager.shared
     
     init(feedStore: FeedStore) {
         self.feedStore = feedStore
@@ -36,39 +35,85 @@ class PollsViewModel: ObservableObject {
     }
     
     func getPollsIfNeeded(cityIds: [String]) async throws {
-        if !hasLoaded {
-            isLoading = true
+        guard hasLoaded == false else { return }
+        isLoading = true
+        defer {
+            isLoading = false
+        }
+        do {
             feedStore.loadedPolls = try await pollManager.fetchPolls(cityIds: cityIds)
             hasLoaded = true
-            isLoading = false
+        }
+        catch {
+            throw NetworkErrors.ErrorFetching
         }
     }
     
     func getMorePolls(cityIds: [String]) async throws {
-        polls = []  
         isLoading = true
-        feedStore.loadedPolls = try await pollManager.fetchPolls(cityIds: cityIds)
-        isLoading = false
+        defer {
+            isLoading = false
+        }
+        do {
+            let newPolls = try await pollManager.fetchPolls(cityIds: cityIds)
+            polls = []
+            feedStore.loadedPolls = newPolls
+        }
+        catch {
+            throw NetworkErrors.ErrorFetching
+        }
     }
     
     func sendVote(pollId: String, optionId: String) async throws {
-        coreDataManager.addPollVote(pollId: pollId, optionId: optionId)
-        try await pollManager.addPollVote(pollId: pollId, optionId: optionId)
+        CoreDataManager.shared.addPollVote(pollId: pollId, optionId: optionId)
+        do {
+            try await pollManager.addPollVote(pollId: pollId, optionId: optionId)
+        } catch {
+            CoreDataManager.shared.removePollVote(pollId: pollId)
+            throw NetworkErrors.ErrorUploading
+        }
     }
     
     func removeVote(pollId: String, optionId: String) async throws {
-        coreDataManager.removePollVote(pollId: pollId)
-        try await pollManager.removePollVote(pollId: pollId, optionId: optionId)
+        CoreDataManager.shared.removePollVote(pollId: pollId)
+        do {
+            try await pollManager.removePollVote(pollId: pollId, optionId: optionId)
+        }
+        catch {
+            CoreDataManager.shared.addPollVote(pollId: pollId, optionId: optionId)
+            throw NetworkErrors.ErrorUploading
+        }
     }
     
     func switchVote(pollId: String, oldOptionId: String, newOptionId: String) async throws {
-        coreDataManager.removePollVote(pollId: pollId)
-        coreDataManager.addPollVote(pollId: pollId, optionId: newOptionId)
-        try await pollManager.switchVote(pollId: pollId, oldOptionId: oldOptionId, newOptionId: newOptionId)
+        CoreDataManager.shared.removePollVote(pollId: pollId)
+        CoreDataManager.shared.addPollVote(pollId: pollId, optionId: newOptionId)
+        do {
+            try await pollManager.switchVote(pollId: pollId, oldOptionId: oldOptionId, newOptionId: newOptionId)
+        }
+        catch {
+            CoreDataManager.shared.removePollVote(pollId: pollId)
+            CoreDataManager.shared.addPollVote(pollId: pollId, optionId: oldOptionId)
+        }
     }
     
     func getPollChoice(pollId: String) -> String {
-        return coreDataManager.getPollChoice(pollId: pollId)
+        return CoreDataManager.shared.getPollChoice(pollId: pollId)
     }
     
+    func isSaved(pollId: String) async -> Bool {
+        let posts = CoreDataManager.shared.getSavedPolls()
+        if posts.contains(where: {$0.id == pollId}) {
+            return true
+        }
+        else {
+            return false
+        }
+    }
+    
+    func deletePoll(pollId: String) async throws {
+        guard pollId != "" else {return}
+        try await pollManager.deletePoll(pollId: pollId)
+    }
 }
+

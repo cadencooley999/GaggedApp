@@ -9,7 +9,11 @@ import SwiftUI
 
 struct SettingsView: View {
     
+    @AppStorage("userId") var userId = ""
+    
     @EnvironmentObject var vm: SettingsViewModel
+    @EnvironmentObject var windowSize: WindowSize
+    @EnvironmentObject var profileViewModel: ProfileViewModel
     
     @Binding var showSettingsView: Bool
     
@@ -20,40 +24,65 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
-            
+            Background()
+                .frame(width: windowSize.size.width, height: windowSize.size.height)
+
             ScrollView {
-                VStack(spacing: 0) {
-                    header
+                VStack(spacing: 16) {
                     notificationsSection
-                        .padding(.top)
                     citySection
-                        .padding(.top)
                     accountSection
-                        .padding(.top)
                     legalSection
-                        .padding(.top)
                     Spacer(minLength: 40)
                 }
+                .padding(.top, 64)
             }
-            
+
+            // Header overlay with fade like TabHomeView/AddPostView
+            VStack {
+                ZStack(alignment: .top) {
+                    Rectangle()
+                        .fill(.thinMaterial)
+                        .mask(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .black, location: 0.0),
+                                    .init(color: .black.opacity(0.9), location: 0.35),
+                                    .init(color: .black.opacity(0.7), location: 0.55),
+                                    .init(color: .black.opacity(0.3), location: 0.75),
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: 180)
+                        .ignoresSafeArea(edges: .top)
+                        .allowsHitTesting(false)
+
+                    header
+                        .zIndex(1)
+                }
+                Spacer()
+            }
+
             if showDeleteView {
                 deletePopUp(showDeleteView: $showDeleteView)
                     .transition(.opacity)
             }
-            
+
             if showCitySelector {
                 CityPickerView2(dissmissable: true, showCityPickerView: $showCitySelector)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
-            
+
             if showChangePassword {
                 ChangePassword(showChangePassword: $showChangePassword)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
-            
+
             if showChangeUsername {
                 ChangeUserName(showChangeUsername: $showChangeUsername)
                     .transition(.move(edge: .trailing))
@@ -66,29 +95,33 @@ struct SettingsView: View {
     }
     
     var header: some View {
-        VStack {
-            HStack(spacing: 0){
-                Image(systemName: "chevron.left")
-                    .font(.title3)
-                    .padding(.trailing, 8)
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showSettingsView = false
-                        }
+        HStack {
+            Image(systemName: "chevron.left")
+                .font(.title3)
+                .padding(8)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .glassEffect(.regular.interactive())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showSettingsView = false
                     }
-                Spacer()
-                Text("Settings")
-                    .font(.headline)
-                Spacer()
-                Image(systemName: "chevron.left")
-                    .font(.headline)
-                    .padding(.trailing, 8)
-                    .opacity(0)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            Divider()
+                }
+            Spacer()
+            Text("Settings")
+                .font(.headline)
+            Spacer()
+            // Placeholder for symmetry
+            Image(systemName: "chevron.left")
+                .font(.title3)
+                .padding(8)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .glassEffect(.regular.interactive())
+                .opacity(0)
         }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
         .frame(height: 55)
     }
     
@@ -98,7 +131,7 @@ struct SettingsView: View {
             
             // Section Title
             Text("Location")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundColor(Color.theme.gray)
                 .padding(.horizontal)
             
@@ -116,6 +149,7 @@ struct SettingsView: View {
                 }
                 
                 Divider()
+                    .padding(.leading, 52)
                 
                 // User License Agreement
                 settingsButtonRow(
@@ -128,8 +162,13 @@ struct SettingsView: View {
                     }
                 }
             }
-            .background(Color.theme.lightGray.opacity(0.15))
-            .cornerRadius(16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.theme.lightGray.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
             .padding(.horizontal)
         }
     }
@@ -138,7 +177,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             
             Text("Notifications")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundColor(Color.theme.gray)
                 .padding(.horizontal)
             
@@ -171,6 +210,7 @@ struct SettingsView: View {
                 )
                 
                 Divider()
+                    .padding(.leading, 52)
                 
                 // --- Name Mentions Toggle ---
                 VStack(spacing: 6) {
@@ -195,8 +235,13 @@ struct SettingsView: View {
                 }
                 .padding(.bottom, 12)
             }
-            .background(Color.theme.lightGray.opacity(0.15))
-            .cornerRadius(16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.theme.lightGray.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
             .padding(.horizontal)
         }
     }
@@ -205,7 +250,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             
             Text("Account")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundColor(Color.theme.gray)
                 .padding(.horizontal)
             
@@ -220,6 +265,7 @@ struct SettingsView: View {
                 }
                 
                 Divider()
+                    .padding(.leading, 52)
                 
                 // Email & Password
                 settingsButtonRow(
@@ -230,6 +276,7 @@ struct SettingsView: View {
                 }
                 
                 Divider()
+                    .padding(.leading, 52)
                 
                 // Premium
                 settingsButtonRow(
@@ -240,6 +287,7 @@ struct SettingsView: View {
                 }
                 
                 Divider()
+                    .padding(.leading, 52)
                 
                 // Log Out
                 settingsButtonRow(
@@ -248,10 +296,12 @@ struct SettingsView: View {
                     textColor: Color.theme.darkRed,
                     title: "Log Out"
                 ) {
-                    vm.logOut()
+                    vm.logOut(userId: userId)
+                    profileViewModel.clearStates()
                 }
                 
                 Divider()
+                    .padding(.leading, 52)
                 
                 // Delete Account
                 settingsButtonRow(
@@ -265,8 +315,13 @@ struct SettingsView: View {
                     }
                 }
             }
-            .background(Color.theme.lightGray.opacity(0.15))
-            .cornerRadius(16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.theme.lightGray.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
             .padding(.horizontal)
         }
     }
@@ -276,7 +331,7 @@ struct SettingsView: View {
             
             // Section Title
             Text("Legal & Notices")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundColor(Color.theme.gray)
                 .padding(.horizontal)
             
@@ -303,8 +358,13 @@ struct SettingsView: View {
                     // TODO: open privacy view
                 }
             }
-            .background(Color.theme.lightGray.opacity(0.15))
-            .cornerRadius(16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.theme.lightGray.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
             .padding(.horizontal)
         }
     }
@@ -358,90 +418,101 @@ struct deletePopUp: View {
     
     @AppStorage("hasOnboarded") var hasOnboarded = true
     @EnvironmentObject var settingsViewModel: SettingsViewModel
+    @EnvironmentObject var profileViewModel: ProfileViewModel
     @Binding var showDeleteView: Bool
     @State var passwordText: String = ""
     @State var failed: Bool = false
     
     var body: some View {
         ZStack {
-            Color.black.opacity(0.3)
+            // Dimmed background with interactive dismissal
+            Color.black.opacity(0.35)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    // Tap outside to dismiss
                     withAnimation(.easeInOut) { showDeleteView = false }
                 }
-            
-            VStack(spacing: 0) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Are you sure?")
-                        .font(.title2)
-                        .fontWeight(.semibold)
+
+            // Glass container
+            VStack(spacing: 16) {
+                // Title + subtitle
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Delete Account")
+                        .font(.title3.weight(.semibold))
                         .foregroundColor(Color.theme.accent)
-                    
+
                     if failed {
                         Text("Failed to delete... try again")
-                            .font(.caption)
+                            .font(.footnote)
                             .foregroundColor(Color.theme.darkRed)
-                            .padding(.vertical, 4)
+                            .transition(.opacity)
                     }
-                    
-                    Text("Enter password to delete account")
-                        .font(.subheadline)
+
+                    Text("Enter your password to confirm. This action cannot be undone.")
+                        .font(.footnote)
                         .foregroundColor(Color.theme.gray)
-                        .fixedSize(horizontal: false, vertical: true)
-                    
-                    TextField("Password...", text: $passwordText)
-                        .autocapitalization(.none)
-                        .padding(10)
-                        .background(Color.theme.lightGray.opacity(0.2))
-                        .cornerRadius(8)
                 }
-                .padding()
-                
-                Divider()
-                
-                // Buttons
-                HStack(spacing: 0) {
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Glass input field (secure)
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(Color.theme.accent)
+                        .font(.subheadline)
+
+                    SecureField("Password", text: $passwordText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.body)
+                }
+                .padding(14)
+                .glassEffect()
+
+                // Buttons row
+                HStack(spacing: 12) {
+                    // Cancel (glassy)
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showDeleteView = false
-                        }
+                        withAnimation(.easeInOut(duration: 0.2)) { showDeleteView = false }
                     }) {
                         Text("Cancel")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .font(.body.weight(.medium))
                             .foregroundColor(Color.theme.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.theme.lightGray.opacity(0.2))
+                            .cornerRadius(20)
                     }
-                    
-                    Divider()
-                        .frame(height: 44)
-                        .background(Color.theme.lightGray)
-                    
+                    .buttonStyle(.plain)
+
+                    // Delete (glassy, emphasized)
                     Button(action: {
-                        if passwordText != "" {
+                        if !passwordText.isEmpty {
                             Task {
                                 let success = try await settingsViewModel.deleteAccount(password: passwordText)
+                                profileViewModel.clearStates()
                                 if !success {
-                                   failed = true
-                                }
-                                else {
+                                    withAnimation { failed = true }
+                                } else {
                                     hasOnboarded = false
                                 }
                             }
                         }
                     }) {
-                        Text("Delete Account")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .foregroundColor(Color.theme.darkRed)
-                            .fontWeight(.semibold)
+                        Text("Delete")
+                            .font(.body.weight(.semibold))
+                            .foregroundColor(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.theme.darkRed)
+                            .cornerRadius(20)
                     }
+                    .buttonStyle(.plain)
+                    .disabled(passwordText.isEmpty)
+                    .opacity(passwordText.isEmpty ? 0.6 : 1)
                 }
-                .frame(height: 44)
             }
-            .background(Color.theme.background)
-            .cornerRadius(16)
-            .padding(.horizontal, 32)
-            .shadow(radius: 10)
+            .padding(20)
+            .glassEffect(in: .rect(cornerRadius: 30))
+            .padding(.horizontal, 24)
         }
     }
 }

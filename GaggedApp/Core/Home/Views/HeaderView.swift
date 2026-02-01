@@ -9,12 +9,12 @@ import SwiftUI
 
 struct HeaderView: View {
     
-//    let allTabs = [
-//        TabBarItem(iconName: "LeaderIcon", title: "LeaderBoard"),
-//        TabBarItem(iconName: "HomeIcon", title: "Home"),
-//        TabBarItem(iconName: "EventsIcon", title: "Events"),
-//        TabBarItem(iconName: "ProfileIcon", title: "Profile")
-//    ]
+    //    let allTabs = [
+    //        TabBarItem(iconName: "LeaderIcon", title: "LeaderBoard"),
+    //        TabBarItem(iconName: "HomeIcon", title: "Home"),
+    //        TabBarItem(iconName: "EventsIcon", title: "Events"),
+    //        TabBarItem(iconName: "ProfileIcon", title: "Profile")
+    //    ]
     @AppStorage("cityChoiceId") var cityChoiceId: String = ""
     
     
@@ -22,67 +22,76 @@ struct HeaderView: View {
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var searchViewModel: SearchViewModel
     @EnvironmentObject var pollsViewModel: PollsViewModel
-
+    
     @Binding var showSearchView: Bool
     @Binding var selectedTab: TabBarItem
     @Binding var showProfileView: Bool
     @Binding var showCityPicker: Bool
     
+    @State var rotation: Double = 0
+    
     @State var isPressed: Bool = false
     
     var body: some View {
         HStack(spacing: 0) {
-        // Left: App name only (Logo removed as requested)
+            // Left: App name only (Logo removed as requested)
             Text("Gagged")
-                .font(.title2.bold())
+                .font(.title.bold())
                 .foregroundColor(Color.theme.darkBlue)
             
             Spacer()
             
             HStack(spacing: 0){
                 Text(locationManager.selectedCity?.city ?? "Unknown")
-                        .font(.headline)
-                        .foregroundColor(Color.theme.darkBlue)
-                        .lineLimit(1)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.theme.lightBlue.opacity(0.2))
-                        )
-                        .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
-                        .scaleEffect(isPressed ? 0.96 : 1.0)
-                        .animation(.easeOut(duration: 0.12), value: isPressed)
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { _ in
-                                    if !isPressed { isPressed = true }
-                                }
-                                .onEnded { _ in
-                                    isPressed = false
-                                    showCityPicker = true
-                                }
-                        )
-
+                    .font(.headline)
+                    .foregroundColor(Color.theme.darkBlue)
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(.regular.interactive().tint(Color.theme.lightBlue.opacity(0.2)))
+                    .onTapGesture {
+                        showCityPicker = true
+                    }
+//                    .background(
+//                        RoundedRectangle(cornerRadius: 20)
+//                            .fill(Color.theme.lightBlue.opacity(0.2))
+//                    )
+//                    .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
+//                    .scaleEffect(isPressed ? 0.96 : 1.0)
+//                    .animation(.easeOut(duration: 0.12), value: isPressed)
+//                    .gesture(
+//                        DragGesture(minimumDistance: 0)
+//                            .onChanged { _ in
+//                                if !isPressed { isPressed = true }
+//                            }
+//                            .onEnded { _ in
+//                                isPressed = false
+//                                showCityPicker = true
+//                            }
+//                    )
+                
                 Button(action: {
                     Task {
-                            do {
-                                cityChoiceId = ""
-
-                                let cities = try await locationManager.requestLocation()
-                                try await homeViewModel.fetchMorePosts(cities: cities)
-                                try await pollsViewModel.getMorePolls(cityIds: cities)
-                            } catch LocationError.permissionDenied {
-                                print("User denied location permission")
-                                // show alert / fallback city
-                            } catch {
-                                print("Location failed:", error)
-                            }
+                        rotation += 360
+                        do {
+                            cityChoiceId = ""
+                            
+                            let cities = try await locationManager.requestLocation()
+                            try await homeViewModel.fetchMorePosts(cities: cities)
+                            try await pollsViewModel.getMorePolls(cityIds: cities)
+                        } catch LocationError.permissionDenied {
+                            print("User denied location permission")
+                            // show alert / fallback city
+                        } catch {
+                            print("Location failed:", error)
                         }
+                    }
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.subheadline.bold())
                         .foregroundColor(Color.theme.darkBlue)
+                        .rotationEffect(Angle(degrees: rotation))
+                        .animation(.spring(duration: 0.3), value: rotation)
                         .padding(8) // Gives a good tap target size
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -92,9 +101,10 @@ struct HeaderView: View {
             Spacer()
             
             Image(systemName: "person")
-                .font(.title3)
-                .foregroundColor(Color.theme.darkBlue)
+                .font(.system(size: 20))
                 .padding(8)
+                .contentShape(Rectangle())
+                .glassEffect(.regular.interactive())
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showProfileView = true
@@ -106,3 +116,5 @@ struct HeaderView: View {
         .frame(height: 55)
     }
 }
+
+

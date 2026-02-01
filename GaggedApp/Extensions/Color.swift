@@ -23,5 +23,6 @@ extension Color {
         let brightRed = Color("brightRed")
         let black = Color("black")
         let lightGray = Color("lightGray")
+        let lighterBlue = Color("lighterBlue")
     }
 }

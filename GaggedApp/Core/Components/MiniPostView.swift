@@ -83,14 +83,39 @@ struct MiniPostView: View {
     var post: PostModel
     let width: CGFloat?
     let stroked: Bool?
+    
+    @EnvironmentObject var windowSize: WindowSize
+    
+    func isOverflowing(
+        username: String,
+        availableWidth: CGFloat,
+        upvotes: Int,
+        downvotes: Int
+    ) -> Bool {
 
-    private let cornerRadius: CGFloat = 22
+        let baseFont = UIFont.preferredFont(forTextStyle: .body)
+        let font = UIFont.systemFont(
+            ofSize: baseFont.pointSize,
+            weight: .semibold
+        )
+        
+        let nameWidth = textWidth(
+            username,
+            font: font
+        )
+
+        let votesWidth = votePillWidth(up: upvotes, down: downvotes)
+
+        return nameWidth + votesWidth > availableWidth
+    }
+
+    private let cornerRadius: CGFloat = 24
 
     var body: some View {
         ZStack {
             // Background card
             RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(.thinMaterial)
+                .fill(.ultraThinMaterial)
 
             VStack(spacing: 0) {
 
@@ -104,52 +129,138 @@ struct MiniPostView: View {
                     .scaledToFill()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius - 6))
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
 
                 // MARK: - Bottom Info Bar
-                HStack(spacing: 10) {
+                if !isOverflowing(username: post.name, availableWidth: CGFloat((windowSize.size.width / 2) - 50), upvotes: post.upvotes, downvotes: post.downvotes) {
+                    VStack(spacing: 0){
+                        HStack(spacing: 0) {
 
-                    // NAME — no wrapping, ellipses
-                    Text(post.name)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundStyle(Color.theme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                            // NAME — no wrapping, ellipses
+                            Text(post.name)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .foregroundStyle(Color.theme.accent)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            Spacer(minLength: 4)
 
-                    // VOTES
-                    HStack(spacing: 4) {
+                            // VOTES
+                            HStack(spacing: 4) {
 
-                        HStack(spacing: 2) {
-                            Text("\(post.upvotes)")
-                            Image(systemName: "arrow.up")
-                                .foregroundColor(Color.theme.darkBlue)
+                                HStack(spacing: 2) {
+                                    Text("\(post.upvotes)")
+                                    Image(systemName: "arrow.up")
+                                        .foregroundColor(Color.theme.darkBlue)
+                                }
+                                .font(.subheadline.bold())
+
+                                HStack(spacing: 2) {
+                                    Text("\(post.downvotes)")
+                                    Image(systemName: "arrow.down")
+                                        .foregroundColor(Color.theme.darkRed)
+                                }
+                                .font(.subheadline.bold())
+
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .layoutPriority(1)
                         }
-                        .font(.subheadline.bold())
-
-                        HStack(spacing: 2) {
-                            Text("\(post.downvotes)")
-                            Image(systemName: "arrow.down")
-                                .foregroundColor(Color.theme.darkRed)
+                        .padding(.horizontal, 14)
+                        
+                        if let city = CityManager.shared.getCity(id: post.cityIds.first ?? "") {
+                            HStack(spacing: 0){
+                                Text(city.city)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.theme.gray)
+                                Spacer()
+                            }
+                            .padding(.bottom)
+                            .padding(.horizontal, 14)
                         }
-                        .font(.subheadline.bold())
-
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                else {
+                    VStack(alignment: .leading, spacing: 0){
+                        HStack(spacing: 4) {
+
+                            HStack(spacing: 2) {
+                                Text("\(post.upvotes)")
+                                Image(systemName: "arrow.up")
+                                    .foregroundColor(Color.theme.darkBlue)
+                            }
+                            .font(.subheadline.bold())
+
+                            HStack(spacing: 2) {
+                                Text("\(post.downvotes)")
+                                Image(systemName: "arrow.down")
+                                    .foregroundColor(Color.theme.darkRed)
+                            }
+                            .font(.subheadline.bold())
+
+                        }
+                        .padding(.vertical, 4)
+                        
+                        Text(post.name)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .foregroundStyle(Color.theme.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
+                        
+                        if let city = CityManager.shared.getCity(id: post.cityIds.first ?? "") {
+                            HStack(spacing: 0){
+                                Text(city.city)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.theme.gray)
+                            }
+                            .padding(.top, 4)
+                            .padding(.bottom)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
             }
         }
         .frame(height: post.height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius)
-                .stroke(Color.theme.orange, lineWidth: stroked == true ? 2 : 0)
+                .stroke(Color.white.opacity(0.2))
         )
-        .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(Color.theme.darkBlue, lineWidth: stroked == true ? 2 : 0)
+        )
         .frame(maxWidth: width != nil ? width : .infinity)
         .transition(.opacity)
+    }
+    
+    func textWidth(_ text: String, font: UIFont) -> CGFloat {
+        let attributes = [NSAttributedString.Key.font: font]
+        return (text as NSString).size(withAttributes: attributes).width
+    }
+    
+    func votePillWidth(up: Int, down: Int) -> CGFloat {
+        let upText = "\(up)"
+        let downText = "\(down)"
+        
+        let baseFont = UIFont.preferredFont(forTextStyle: .body)
+        let font = UIFont.systemFont(
+            ofSize: baseFont.pointSize,
+            weight: .semibold
+        )
+
+        let numberWidth = textWidth(upText, font: font) + textWidth(downText, font: font)
+
+        return numberWidth + 40 // arrows + padding
     }
 }

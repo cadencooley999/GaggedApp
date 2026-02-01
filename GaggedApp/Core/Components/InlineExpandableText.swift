@@ -11,13 +11,14 @@ import SwiftUI
 struct InlineExpandableText: View {
     let text: String
     let limit: Int
+    let font: Font
     @State private var expanded = false
     
     var body: some View {
         Group {
             if text.count <= limit {
                 Text(text)
-                    .font(.body)
+                    .font(font)
             }
             else if text.count > limit && !expanded {
                 // Truncated text + inline "See more"
@@ -46,7 +47,7 @@ struct InlineExpandableText: View {
                 }
             }
         }
-        .font(.body)
+        .font(font)
         .lineLimit(nil)
     }
 }

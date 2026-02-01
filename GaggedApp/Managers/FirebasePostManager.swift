@@ -9,6 +9,8 @@ import Foundation
 import SwiftUI
 import FirebaseFirestore
 
+enum PostManagerError: Error { case invalidId, invalidCityIds, documentNotFound }
+
 class FirebasePostManager {
     
     static let shared = FirebasePostManager()
@@ -32,18 +34,23 @@ class FirebasePostManager {
             "name" : post.name,
             "createdAt" : post.createdAt,
             "cityIds" : post.cityIds,
-            "keywords" : generateKeywords(authorName: post.authorName, subjectName: post.name, captionPrefix: post.text),
+            "tags" : post.tags,
+            "keywords" : generateKeywords(authorName: post.authorName, subjectName: post.name, captionPrefix: post.text, tags: post.tags),
             "upvotes" : post.upvotes,
             "downvotes" : post.downvotes
         ])
     }
     
     func deletePost(postId: String) async throws {
-        let postRef = postsCollection.document(postId)
-        try await postRef.delete()
+        guard !postId.isEmpty else { throw PostManagerError.invalidId }
+        let ref = postsCollection.document(postId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { return }
+        try await ref.delete()
     }
     
     func getPosts(from cityIDs: [String]) async throws -> [PostModel] {
+        guard !cityIDs.isEmpty else { return [] }
         
         // Break into batches of 10 per Firestore rule
         let batches = cityIDs.chunked(into: 10)
@@ -72,12 +79,15 @@ class FirebasePostManager {
     }
 
     func getPost(id: String) async throws -> PostModel {
+        guard !id.isEmpty else { throw PostManagerError.invalidId }
         let doc = try await postsCollection.document(id).getDocument()
+        guard doc.exists else { throw PostManagerError.documentNotFound }
         return mapItem(item: doc)
     }
     
     
     func getUserPosts(uid: String) async throws -> [PostModel] {
+        guard !uid.isEmpty else { return [] }
         
         var posts: [PostModel] = []
         
@@ -85,7 +95,7 @@ class FirebasePostManager {
         let newDocs = try await query.getDocuments()
         
         for i in newDocs.documents {
-            var post = await mapItem(item: i)
+            var post = mapItem(item: i)
             posts.append(post)
         }
         
@@ -94,22 +104,39 @@ class FirebasePostManager {
     }
     
     func upvotePost(postId: String) async throws {
-        try await postsCollection.document(postId).updateData(["upvotes": FieldValue.increment(Int64(1))])
+        guard !postId.isEmpty else { throw PostManagerError.invalidId }
+        let ref = postsCollection.document(postId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw PostManagerError.documentNotFound }
+        try await ref.updateData(["upvotes": FieldValue.increment(Int64(1))])
     }
     
     func removeUpvote(postId: String) async throws {
-        try await postsCollection.document(postId).updateData(["upvotes": FieldValue.increment(Int64(-1))])
+        guard !postId.isEmpty else { throw PostManagerError.invalidId }
+        let ref = postsCollection.document(postId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw PostManagerError.documentNotFound }
+        try await ref.updateData(["upvotes": FieldValue.increment(Int64(-1))])
     }
     
     func downvotePost(postId: String) async throws {
-        try await postsCollection.document(postId).updateData(["downvotes": FieldValue.increment(Int64(1))])
+        guard !postId.isEmpty else { throw PostManagerError.invalidId }
+        let ref = postsCollection.document(postId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw PostManagerError.documentNotFound }
+        try await ref.updateData(["downvotes": FieldValue.increment(Int64(1))])
     }
     
     func removeDownvote(postId: String) async throws {
-        try await postsCollection.document(postId).updateData(["downvotes": FieldValue.increment(Int64(-1))])
+        guard !postId.isEmpty else { throw PostManagerError.invalidId }
+        let ref = postsCollection.document(postId)
+        let snap = try await ref.getDocument()
+        guard snap.exists else { throw PostManagerError.documentNotFound }
+        try await ref.updateData(["downvotes": FieldValue.increment(Int64(-1))])
     }
     
     func getAllPostsNearby(cities: [String]) async throws -> [PostModel] {
+        guard !cities.isEmpty else { return [] }
         var results: [PostModel] = []
         var seen: Set<String> = []
 
@@ -133,12 +160,19 @@ class FirebasePostManager {
     func getPostsFromSearch(keyword: String, allPostsNearby: [PostModel]) -> [PostModel] {
 
         return allPostsNearby.filter { post in
-            let lower = keyword.lowercased()
+            var lower = keyword.lowercased()
             
-            // 1. Match post name
-            if post.name.lowercased().contains(lower) { return true }
+            lower = lower.replacingOccurrences(of: "#", with: "")
             
-            if post.authorName.lowercased().contains(lower) { return true }
+//            // 1. Match post name
+//            if post.name.lowercased().contains(lower) { return true }
+//            
+//            if post.authorName.lowercased().contains(lower) { return true }
+//            
+//            if post.tags.contains(where: { $0.lowercased().contains(lower) }) {
+//                return true
+//            }
+            if post.keywords.contains(lower) {return true}
             
             // 3. Match city names
             let cities = CityManager.shared.getCities(ids: post.cityIds)
@@ -151,16 +185,20 @@ class FirebasePostManager {
     }
     
     func getPostsFromIds(ids: [String]) async throws -> [PostModel] {
+        guard !ids.isEmpty else { return [] }
         var posts: [PostModel] = []
         for id in ids {
+            guard !id.isEmpty else { continue }
             let doc = try await postsCollection.document(id).getDocument()
+            guard doc.exists else { continue }
             let newitem = mapItem(item: doc)
             posts.append(newitem)
         }
         return posts
     }
 
-    func getTopUpsThisWeek(from cityIDs: [String]) async throws -> [PostModel] {
+    func getTopUpsThisWeek(from cityIDs: [String]) async throws -> ([PostModel], [Int]) {
+        guard !cityIDs.isEmpty else { return ([], []) }
         let week = weekId()
         let chunks = cityIDs.chunked(into: 10)
 
@@ -200,16 +238,18 @@ class FirebasePostManager {
             .values
             .sorted { $0.upvotes > $1.upvotes }
             .prefix(5)
-
+        
+        let top5Ups: [Int] = top5.map {$0.upvotes}
         let postIds = top5
             .filter { $0.upvotes > 0 }
             .map { $0.postId }
 
-        return try await getPostsFromIds(ids: postIds)
+        return try await (getPostsFromIds(ids: postIds), top5Ups)
     }
 
     
     func getTopUpsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
+        guard !cityIDs.isEmpty else { return [] }
         let chunks = cityIDs.chunked(into: 10)
 
         let posts: [PostModel] = try await withThrowingTaskGroup(
@@ -251,6 +291,7 @@ class FirebasePostManager {
 
   
     func getTopDownsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
+        guard !cityIDs.isEmpty else { return [] }
         let chunks = cityIDs.chunked(into: 10)
 
         let posts: [PostModel] = try await withThrowingTaskGroup(
@@ -293,6 +334,7 @@ class FirebasePostManager {
     
     func getUpvotedPostFromCoreData() async throws -> [PostModel] {
         let votedposts = CoreDataManager.shared.getUpvotedPosts()
+        print("Voted posts: ", votedposts)
         let posts = try await getPostsFromIds(ids: votedposts.compactMap({$0.id}))
         return posts
     }
@@ -308,17 +350,18 @@ class FirebasePostManager {
         let authorName = item["authorName"] as? String ?? ""
         let authorPicUrl = item["authorPicUrl"] as? String ?? ""
         let keywords = item["keywords"] as? [String] ?? []
+        let tags = item["tags"] as? [String] ?? []
         let cityIds = item["cityIds"] as? [String] ?? []
         let upvotes = item["upvotes"] as? Int ?? 0
         let downvotes = item["downvotes"] as? Int ?? 0
-
-        print("mapping doc", id)
         
-        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, createdAt: createdAt, authorId: authorId, authorName: authorName, authorPicUrl: authorPicUrl, height: 180, cityIds: cityIds, keywords: keywords, upvotes: upvotes, downvotes: downvotes)
+        return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, createdAt: createdAt, authorId: authorId, authorName: authorName, authorPicUrl: authorPicUrl, height: 260, cityIds: cityIds, tags: tags, keywords: keywords, upvotes: upvotes, downvotes: downvotes)
     }
     
-    func generateKeywords(authorName: String, subjectName: String, captionPrefix: String) -> [String] {
-        let inputs = [authorName, subjectName, String(captionPrefix.prefix(5))]
+    func generateKeywords(authorName: String, subjectName: String, captionPrefix: String, tags: [String]) -> [String] {
+        var inputs = [authorName, subjectName, String(captionPrefix.prefix(5))]
+        
+        inputs.append(contentsOf: tags)
         
         var keywords: [String] = []
         
@@ -350,6 +393,7 @@ class FirebasePostManager {
             authorPicUrl: "ProfPic1",
             height: 20,
             cityIds: ["NYC001"],
+            tags: [],
             keywords: ["SwiftUI", "iOS", "Design"],
             upvotes: 0,
             downvotes: 0
@@ -365,6 +409,7 @@ class FirebasePostManager {
             authorPicUrl: "ProfPic1",
             height: 120,
             cityIds: ["SF002", "LA003"],
+            tags: [],
             keywords: ["Firebase", "Firestore", "Backend"],
             upvotes: 0,
             downvotes: 0
@@ -392,3 +437,4 @@ extension Array {
         }
     }
 }
+

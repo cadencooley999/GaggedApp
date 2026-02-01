@@ -21,6 +21,7 @@ struct HomeView: View {
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var windowSize: WindowSize
     
     @Binding var hideTabBar: Bool
     @Binding var showPostView: Bool
@@ -33,20 +34,21 @@ struct HomeView: View {
     
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
+            Background()
+                .frame(width: windowSize.size.width, height: windowSize.size.height)
 //            Image("AppImage")
 //                .resizable()
 //                .frame(width: 300)
 //                .frame(height: 300)
             VStack(spacing: 0) {
-                ScrollView(showsIndicators: true) {
+                ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
                             postSection
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 8)
                                 .transition(.opacity)
                         }
-                        .padding(.top, 60 + safeArea().top)
+                        .padding(.top, 55 + safeArea().top)
                         .padding(.bottom, 64)
                 }
                 .refreshable {
@@ -55,20 +57,20 @@ struct HomeView: View {
                         try await homeViewModel.fetchMorePosts(cities: locationManager.citiesInRange)
                     }
                 }
-                .onScrollPhaseChange({ oldPhase, newPhase, context in
-                    let newOffset = context.geometry.contentOffset
-                    if newOffset.y < scrollOffset.y {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            hideTabBar = false
-                        }
-                    }
-                    else if newOffset.y > scrollOffset.y && !(newOffset.y <= 10) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            hideTabBar = true
-                        }
-                    }
-                    scrollOffset = newOffset
-                })
+//                .onScrollPhaseChange({ oldPhase, newPhase, context in
+//                    let newOffset = context.geometry.contentOffset
+//                    if newOffset.y < scrollOffset.y {
+//                        withAnimation(.easeInOut(duration: 0.2)) {
+//                            hideTabBar = false
+//                        }
+//                    }
+//                    else if newOffset.y > scrollOffset.y && !(newOffset.y <= 10) {
+//                        withAnimation(.easeInOut(duration: 0.2)) {
+//                            hideTabBar = true
+//                        }
+//                    }
+//                    scrollOffset = newOffset
+//                })
                 .ignoresSafeArea()
             }
 //            VStack(spacing: 0) {
@@ -121,6 +123,7 @@ struct HomeView: View {
                                 MiniPostView(post: post, width: nil, stroked: nil)
                                     .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
                                     .contentShape(Rectangle())
+                                    .shadow(color: .black.opacity(0.10), radius: 8, y: 6)
                                     .transition(.opacity)
                                     .onTapGesture {
                                         print("Little Post Tapped")

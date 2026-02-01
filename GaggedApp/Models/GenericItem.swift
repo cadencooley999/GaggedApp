@@ -8,11 +8,13 @@
 enum GenericItem: Identifiable {
     case post(PostModel)
     case comment(CommentModel)
+    case poll(PollModel)
     
     var id: String {
         switch self {
         case .post(let post): return "\(post.id)"
         case .comment(let comment): return "\(comment.id)"
+        case .poll(let poll): return "\(poll.id)"
         }
     }
     
@@ -20,6 +22,7 @@ enum GenericItem: Identifiable {
         switch self {
         case .post(let post): return "\(post.authorId)"
         case .comment(let comment): return "\(comment.authorId)"
+        case .poll(let poll): return "\(poll.authorId)"
         }
     }
     

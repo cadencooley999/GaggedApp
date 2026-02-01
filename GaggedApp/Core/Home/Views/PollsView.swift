@@ -25,20 +25,26 @@ struct PollsView: View {
     
     @EnvironmentObject var pollsViewModel: PollsViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var windowSize: WindowSize
     
     var body: some View {
         ZStack {
-            Color.theme.background
-                .ignoresSafeArea()
-            ScrollView {
+            Background()
+                .frame(maxWidth: windowSize.size.width, maxHeight: windowSize.size.height)
+//            Color.blue
+//                .ignoresSafeArea()
+//                .frame(width: windowSize.size.width, height: windowSize.size.height)
+            ScrollView (showsIndicators: false) {
                 VStack(spacing: 0) {
                     ForEach(pollsViewModel.polls, id: \.poll.id) { poll in
                         PollCard(poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView)
+                            .shadow(color: .black.opacity(0.12), radius: 8, y: 6)
                             .padding(.bottom)
                     }
                 }
-                .padding(.top, 55 + safeArea().top)
+                .padding(.top, safeArea().top + 16)
                 .padding(.bottom, 72)
+                .padding(.horizontal)
             }
             .refreshable {
                 Task {

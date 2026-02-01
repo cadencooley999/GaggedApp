@@ -19,9 +19,10 @@ final class SettingsViewModel: ObservableObject {
     
     let userManager = UserManager.shared
     
-    func logOut() {
+    func logOut(userId: String) {
         Task {
             try await userManager.signOutUser()
+            CoreDataManager.teardown()
             isLoggedIn = false
         }
     }
@@ -29,6 +30,7 @@ final class SettingsViewModel: ObservableObject {
     func deleteAccount(password: String) async throws -> Bool {
         do {
             try await userManager.reauthAndDelete(email: userEmail, password: password)
+            CoreDataManager.teardown()
             return true
         } catch {
             print(error.localizedDescription)

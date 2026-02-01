@@ -21,6 +21,8 @@ enum PageDirection {
     case backward
 }
 
+
+
 struct OnboardingView: View {
     
     @EnvironmentObject var vm: OnboardingViewModel
@@ -47,11 +49,14 @@ struct OnboardingView: View {
     
     let onboardingTabs: [OnboardingTab] = [.policy, .username, .email, .password, .city]
     
+    @FocusState private var focusedField: Field?
+    enum Field { case username, email, password }
+    
     @State var currentOnboardingTabIndex: Int = 0
 
     var body: some View {
         ZStack {
-            Color.theme.background
+            Background()
                 .ignoresSafeArea()
             if welcomed {
                 VStack {
@@ -92,14 +97,38 @@ struct OnboardingView: View {
         switch onboardingTabs[currentOnboardingTabIndex] {
         case .policy:
             policy
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        focusedField = nil
+                    }                }
         case .username:
             username
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        focusedField = .username
+                    }
+                }
         case .email:
             email
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        focusedField = .email
+                    }
+                }
         case .password:
             password
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        focusedField = .password
+                    }
+                }
         case .city:
             city
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        focusedField = nil
+                    }
+                }
         }
     }
     
@@ -184,7 +213,6 @@ struct OnboardingView: View {
             })
         }
         .frame(maxWidth: .infinity)
-        .background(Color.theme.background)
     }
     
     var username: some View {
@@ -201,11 +229,14 @@ struct OnboardingView: View {
 
                 TextField("Username", text: $usernameInput)
                     .padding()
-                    .background(Color.theme.lightGray.opacity(0.15))
-                    .cornerRadius(12)
-                    .onChange(of: usernameInput) {
-                        usernameInput = usernameInput.replacing(" ", with: "")
-                    }
+                    .focused($focusedField, equals: .username)
+                    .glassEffect()
+                    .onChange(of: usernameInput, {
+                        usernameInput = usernameInput.replacingOccurrences(of: " ", with: "")
+                            .replacingOccurrences(of: "\t", with: "")
+                            .replacingOccurrences(of: "\n", with: "")
+                        usernameInput = String(usernameInput.prefix(12))
+                    })
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                 
@@ -244,14 +275,7 @@ struct OnboardingView: View {
                     }
                     .padding(.horizontal, 52)
                     .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.background.opacity(0.9))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.theme.gray.opacity(0.4), lineWidth: 1)
-                    )
+                    .glassEffect()
                 }
                 
                 Spacer()
@@ -279,7 +303,6 @@ struct OnboardingView: View {
             .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.theme.background)
     }
     
     var email: some View {
@@ -296,15 +319,17 @@ struct OnboardingView: View {
 
                 TextField("Email", text: $emailInput)
                     .padding()
-                    .background(Color.theme.lightGray.opacity(0.15))
-                    .cornerRadius(12)
+                    .focused($focusedField, equals: .email)
+                    .glassEffect()
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .onChange(of: emailInput) {
+                    .onChange(of: emailInput, {
                         emailInput = emailInput.replacingOccurrences(of: " ", with: "")
-                    }
+                            .replacingOccurrences(of: "\t", with: "")
+                            .replacingOccurrences(of: "\n", with: "")
+                    })
                 if showEmailError {
-                    Text("Email not valid")
+                    Text("Invalid email")
                         .font(.footnote)
                         .foregroundColor(Color.theme.darkRed)
                         .padding(.leading, 8)
@@ -331,14 +356,7 @@ struct OnboardingView: View {
                     }
                     .padding(.horizontal, 52)
                     .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.background.opacity(0.9))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.theme.gray.opacity(0.4), lineWidth: 1)
-                    )
+                    .glassEffect()
                 }
                 
                 Spacer()
@@ -366,7 +384,6 @@ struct OnboardingView: View {
             .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.theme.background)
     }
     
     var password: some View {
@@ -386,14 +403,23 @@ struct OnboardingView: View {
                         if showPassword {
                             TextField("Password", text: $passwordInput)
                                 .textInputAutocapitalization(.never)
+                                .focused($focusedField, equals: .password)
                                 .autocorrectionDisabled()
                         } else {
                             SecureField("Password", text: $passwordInput)
                                 .textInputAutocapitalization(.never)
+                                .focused($focusedField, equals: .password)
                                 .autocorrectionDisabled()
+                            
                         }
                     }
                     .padding()
+                    .onChange(of: usernameInput, {
+                        passwordInput = passwordInput.replacingOccurrences(of: " ", with: "")
+                            .replacingOccurrences(of: "\t", with: "")
+                            .replacingOccurrences(of: "\n", with: "")
+                        passwordInput = String(passwordInput.prefix(16))
+                    })
 
                     Button(action: {
                         showPassword.toggle()
@@ -403,8 +429,7 @@ struct OnboardingView: View {
                     }
                     .padding(.trailing, 12)
                 }
-                .background(Color.theme.lightGray.opacity(0.15))
-                .cornerRadius(12)
+                .glassEffect()
                 
                 VStack(alignment: .leading, spacing: 4){
                     HStack {
@@ -478,14 +503,7 @@ struct OnboardingView: View {
                     }
                     .padding(.horizontal, 52)
                     .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.background.opacity(0.9))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.theme.gray.opacity(0.4), lineWidth: 1)
-                    )
+                    .glassEffect()
                 }
 
                 Spacer()
@@ -513,7 +531,6 @@ struct OnboardingView: View {
             .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.theme.background)
     }
     
     var city: some View {
@@ -533,6 +550,15 @@ struct OnboardingView: View {
                     if locationManager.authorizationStatus == .authorizedAlways || locationManager.authorizationStatus == .authorizedWhenInUse {
                         if let city = locationManager.selectedCity {
                             cityRow(city: city, isRecent: false)
+                        }
+                        else {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.subheadline.bold())
+                                .foregroundColor(Color.theme.darkBlue)
+                                .padding(8)
+                            Text("Use Current Location")
+                                .font(.body)
+                                .foregroundStyle(Color.theme.darkBlue)
                         }
                     } else {
                         Image(systemName: "mappin.and.ellipse")
@@ -555,7 +581,7 @@ struct OnboardingView: View {
                 .frame(height: 55)
                 .background(
                     Rectangle()
-                        .fill(Color.theme.background.opacity(0.001))
+                        .fill(Color.white.opacity(0.001))
                         .onTapGesture {
                             if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
                                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -568,10 +594,7 @@ struct OnboardingView: View {
                             }
                         }
                 )
-                .background(
-                    Color.theme.lightGray.opacity(0.15)
-                        .cornerRadius(15)
-                )
+                .glassEffect()
             }
             .padding(.horizontal)
             .padding(.top, 96)
@@ -602,14 +625,7 @@ struct OnboardingView: View {
                     }
                     .padding(.horizontal, 52)
                     .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.background.opacity(0.9))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.theme.gray.opacity(0.4), lineWidth: 1)
-                    )
+                    .glassEffect()
                 }
 
                 Spacer()
@@ -649,7 +665,6 @@ struct OnboardingView: View {
             .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.theme.background)
     }
     
     var header: some View {
@@ -754,10 +769,6 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 55)
-        .background(
-            Rectangle()
-                .fill(Color.theme.background.opacity(0.001))
-        )
     }
     
     func validatePassword(_ password: String) -> Bool {
@@ -794,7 +805,7 @@ struct OnboardingView: View {
             let usernameExist = usernameInput != ""
             if passvalid && emailvalid && usernameAppropriate && usernameExist {
                 do {
-                    try await vm.signInEmailAndPassword(email: emailInput, password: passwordInput, username: usernameInput)
+                    try await vm.signInEmailAndPassword(email: emailInput, password: passwordInput, username: usernameInput.replacingOccurrences(of: "  ", with: ""))
                 }
                 catch {
                     submitError = error.localizedDescription
@@ -822,3 +833,4 @@ struct OnboardingView: View {
         }
     }
 }
+

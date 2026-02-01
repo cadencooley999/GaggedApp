@@ -13,24 +13,24 @@ struct CommentModel: Identifiable {
     let postName: String
     let message: String
     let authorId: String
+    let authorName: String
+    var authorProfPic: String
     let createdAt: Timestamp
     var upvotes: Int
-    let parentCommentId: String?
+    let parentCommentId: String
     var hasChildren: Bool
     let isOnEvent: Bool
-}
-
-struct UICommentModel: Identifiable {
-    let id: String
-    var comment: CommentModel
-    let author: UserModel
-}
+}   
 
 struct viewCommentModel: Identifiable {
-    var uiComment: UICommentModel
+    var comment: CommentModel
     var isExpanded: Bool
     let id: String
-    let indentLayer: Int
-    var numChildren: Int
-    let isGrandchild: Bool
+    var isGrandchild: Bool
+    var threadId: String
+}
+
+struct CommentWithExpanded {
+    var comment: CommentModel
+    var isExpanded: Bool
 }

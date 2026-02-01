@@ -42,6 +42,7 @@ struct GaggedAppApp: App {
     @StateObject var locationManager = LocationManager()
     @StateObject var pollsViewModel: PollsViewModel
     @StateObject var feedStore = FeedStore()
+    @StateObject private var windowSize = WindowSize()
     
     init() {
         let feedStore = FeedStore()
@@ -56,6 +57,20 @@ struct GaggedAppApp: App {
         )
         
         _pollsViewModel = StateObject(wrappedValue: PollsViewModel(feedStore: feedStore))
+        
+        if userId != "" {
+            CoreDataManager.setup(userId: userId)
+        }
+        
+        Task {
+            let newTags = try await TagManager.shared.loadTags()
+            let newCategories = try await TagManager.shared.loadCategories()
+            guard !newTags.isEmpty && !newCategories.isEmpty else {
+                return
+            }
+            TagManager.shared.tagList = newTags
+            TagManager.shared.categories = newCategories
+        }
     }
     
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
@@ -64,30 +79,61 @@ struct GaggedAppApp: App {
         WindowGroup {
             if hasOnboarded {
                 if isLoggedIn && userId != "" {
-                    TabHomeView()
-                        .environmentObject(homeViewModel)
-                        .environmentObject(addPostViewModel)
-                        .environmentObject(profileViewModel)
-                        .environmentObject(searchViewModel)
-                        .environmentObject(postViewModel)
-//                        .environmentObject(eventsViewModel)
-//                        .environmentObject(eventViewModel)
-                        .environmentObject(leaderViewModel)
-                        .environmentObject(settingsViewModel)
-                        .environmentObject(locationManager)
-                        .environmentObject(pollsViewModel)
-                        .environmentObject(feedStore)
+                    GeometryReader { geo in
+                        TabHomeView()
+                            .onAppear {
+                                windowSize.size = geo.size
+                            }
+                            .onChange(of: geo.size) { newSize in
+                                windowSize.size = newSize
+                            }
+                            .environmentObject(homeViewModel)
+                            .environmentObject(addPostViewModel)
+                            .environmentObject(profileViewModel)
+                            .environmentObject(searchViewModel)
+                            .environmentObject(postViewModel)
+    //                        .environmentObject(eventsViewModel)
+    //                        .environmentObject(eventViewModel)
+                            .environmentObject(leaderViewModel)
+                            .environmentObject(settingsViewModel)
+                            .environmentObject(locationManager)
+                            .environmentObject(pollsViewModel)
+                            .environmentObject(feedStore)
+                    }
+                    .environmentObject(windowSize)
                 }
                 else {
-                    LoginView()
-                        .environmentObject(loginViewModel)
+                    GeometryReader { geo in
+                        LoginView()
+                            .onAppear {
+                                windowSize.size = geo.size
+                            }
+                            .onChange(of: geo.size) { newSize in
+                                windowSize.size = newSize
+                            }
+                            .environmentObject(loginViewModel)
+                    }
+                    .environmentObject(windowSize)
                 }
             }
             else {
-                OnboardingView()
-                    .environmentObject(onBoardingViewModel)
-                    .environmentObject(locationManager)
+                GeometryReader { geo in
+                    OnboardingView()
+                        .onAppear {
+                            windowSize.size = geo.size
+                        }
+                        .onChange(of: geo.size) { newSize in
+                            windowSize.size = newSize
+                        }
+                        .environmentObject(onBoardingViewModel)
+                        .environmentObject(locationManager)
+                }
+                .environmentObject(windowSize)
             }
         }
     }
+}
+
+final class WindowSize: ObservableObject {
+    @Published var size: CGSize = .zero
 }

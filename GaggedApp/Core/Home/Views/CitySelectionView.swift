@@ -22,7 +22,7 @@ struct CitySelectionView: View {
     
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
+            Color(.systemGroupedBackground).ignoresSafeArea()
             ScrollView {
                 VStack {
                     header
@@ -41,80 +41,98 @@ struct CitySelectionView: View {
     }
     
     var header: some View {
-        HStack(spacing: 8) {
+        HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
 
-            Image(systemName: "magnifyingglass")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            TextField("Search Cities", text: $homeViewModel.citySearchText)
-                .textFieldStyle(.plain)
-                .font(.body)
+                TextField("Search Cities", text: $homeViewModel.citySearchText)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+            }
+            .padding(14)
+            .glassEffect()
+            .padding(.horizontal, 8)
+            Spacer()
+            Text("Done")
+                .font(.subheadline.bold())
+                .foregroundStyle(Color.theme.darkBlue)
+                .padding()
+                .glassEffect(.regular.tint(Color.theme.lightBlue.opacity(0.2)), in: .rect(cornerRadius: 30))
+                .onTapGesture {
+                    showCitySelectionView = false
+                }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            Color.theme.lightGray
-                .opacity(0.2)
-                .cornerRadius(16)
-        )
-        .padding(.horizontal, 8)
     }
     
     var citiesSection: some View {
         VStack(spacing: 12) {
             if let city = locationManager.selectedCity {
-                cityRow(city: city, isRecent: false, isCurrent: true)
-                    .background(
-                        Color.theme.lightGray.opacity(0.15)
-                            .cornerRadius(15)
-                    )
-                    .onTapGesture {
-                        cityTapped(city: city)
-                    }
+                Text("Current City")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(Color.theme.gray)
+                    .padding(.horizontal)
+                VStack {
+                    cityRow(city: city, isRecent: false, isCurrent: true)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            cityTapped(city: city)
+                        }
+                }
+                .glassEffect(in: .rect(cornerRadius: 30))
             }
             
-            LazyVStack(spacing: 0) {
-
-                // Recent Cities
-                if homeViewModel.citySearchText == "" {
+            if homeViewModel.citySearchText == "" && !recentCities.isEmpty {
+                Text("Recent Cities")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(Color.theme.gray)
+                    .padding(.horizontal)
+                VStack(spacing: 0) {
                     ForEach(recentCities) { city in
                         cityRow(city: city, isRecent: true, isCurrent: false)
+                            .contentShape(Rectangle())
                             .onTapGesture {
                                 cityTapped(city: city)
                             }
-                        Divider()
+                        if city.id != recentCities.last?.id { Divider() }
                     }
                 }
+                .glassEffect(in: .rect(cornerRadius: 30))
 
-                // All Cities minus recent
-                ForEach(homeViewModel.allCitiesList.filter({$0.id != locationManager.selectedCity?.id})) { city in
-                    if recentIDs.contains(city.id) {
-                        cityRow(city: city, isRecent: true, isCurrent: false)
-                            .onTapGesture {
-                                cityTapped(city: city)
-                            }
-                    }
-                    else  {
-                        cityRow(city: city, isRecent: false, isCurrent: false)
-                            .onTapGesture {
-                                cityTapped(city: city)
-                            }
-                    }
-                    if city.id != homeViewModel.allCitiesList.last?.id { Divider() }
+            }
+            
+            Text("All Cities")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(Color.theme.gray)
+                .padding(.horizontal)
+            
+            LazyVStack(spacing: 0) {
+                ForEach(homeViewModel.allCitiesList.filter({ $0.id != locationManager.selectedCity?.id })) { city in
+                    cityRow(city: city, isRecent: recentIDs.contains(city.id), isCurrent: false)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            cityTapped(city: city)
+                        }
+                    if city.id != homeViewModel.allCitiesList.filter({ $0.id != locationManager.selectedCity?.id }).last?.id { Divider() }
                 }
             }
-            .background(
-                Color.theme.lightGray.opacity(0.15)
-                    .cornerRadius(15)
-            )
+            .glassEffect(in: .rect(cornerRadius: 30))
+
         }
     }
     
     func cityTapped(city: City) {
         if !addPostVm.selectedCities.contains(where: { $0.id == city.id }) {
-            addPostVm.selectedCities.append(city)
-            showCitySelectionView = false
+            if addPostVm.selectedCities.count < 2 {
+                addPostVm.selectedCities.append(city)
+            }
+        }
+        else {
+            addPostVm.selectedCities.removeAll(where: { $0.id == city.id })
         }
     }
 
@@ -139,14 +157,6 @@ struct CitySelectionView: View {
 
             if isRecent {
                 Text(" Recent")
-                    .font(.caption)
-                    .foregroundStyle(Color.theme.darkBlue)
-                    .italic()
-                    .padding(.leading, 16)
-            }
-            
-            if isCurrent {
-                Text(" Current")
                     .font(.caption)
                     .foregroundStyle(Color.theme.darkBlue)
                     .italic()
@@ -195,88 +205,43 @@ struct CitySelectionView: View {
         let data = Data(json.utf8)
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
-    
-//
-//    @EnvironmentObject var addPostVm: AddPostViewModel
-//    
-//    @Binding var showCitySelectionView: Bool
-//    
-//    @FocusState var isFocused: Bool
-//    
-//    var body: some View {
-//        ZStack {
-//            Color.theme.background
-//                .ignoresSafeArea()
-//            ScrollView {
-//                header
-//                cityList
-//            }
-//        }
-//
-//    }
-//    
-//    var header: some View {
-//        VStack(spacing: 0){
-//            HStack {
-//                Image(systemName: "chevron.left")
-//                    .font(.headline)
-//                    .onTapGesture {
-//                        print("CHEV TAPPED")
-//                        isFocused = false
-//                        showCitySelectionView = false
-//                    }
-//                    .padding(.trailing, 8)
-//                TextField("Search cities...", text: $addPostVm.query)
-//                    .focused($isFocused)
-//                    .padding(8)
-//                    .background(Color.theme.lightGray.opacity(0.3).cornerRadius(20))
-//                    .onChange(of: addPostVm.query) { _ in
-//                        print(addPostVm.query)
-//                        addPostVm.searchCities()
-//                    }
-//                
-//            }
-//            .padding(.horizontal)
-//            .padding(.vertical, 8)
-//            Divider()
-//        }
-//        .background(Color.theme.background)
-//    }
-//    
-//    var cityList: some View {
-//        VStack {
-//            ForEach(addPostVm.filteredCities) { city in
-//                HStack(spacing: 0){
-//                    Text(city.city)
-//                        .italic()
-//                        .font(.body)
-//                    Text(", " + city.state_id)
-//                        .font(.body)
-//                        .italic()
-//                    Spacer()
-//                    if addPostVm.selectedCities.contains(where: { $0.id == city.id }) {
-//                        Image(systemName: "checkmark")
-//                            .font(.body)
-//                    }
-//                    else {
-//                        Image(systemName: "plus")
-//                            .font(.body)
-//                            .foregroundStyle(Color.theme.darkBlue)
-//                    }
-//                }
-//                .frame(height: 35)
-//                .frame(maxWidth: .infinity, alignment: .leading)
-//                .padding(.horizontal)
-//                .onTapGesture {
-//                    if !addPostVm.selectedCities.contains(where: { $0.id == city.id }) {
-//                        addPostVm.selectedCities.append(city)
-//                        showCitySelectionView = false
-//                    }
-//                }
-//                Divider()
-//            }
-//        }
-//    }
+}
+
+private struct SectionCard<Content: View, Toolbar: View>: View {
+    let title: String?
+    let content: Content
+    let toolbar: Toolbar
+
+    init(title: String? = nil,
+         @ViewBuilder content: () -> Content,
+         @ViewBuilder toolbar: () -> Toolbar = { EmptyView() }) {
+        self.title = title
+        self.content = content()
+        self.toolbar = toolbar()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let title {
+                HStack {
+                    Text(title)
+                        .font(.headline)
+                    Spacer()
+                    toolbar
+                }
+            }
+            content
+        }
+        .padding(16)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.theme.lightGray.opacity(0.15), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .padding(.horizontal, 4)
+    }
 }
 
 #Preview {

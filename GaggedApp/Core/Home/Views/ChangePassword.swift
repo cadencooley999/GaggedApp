@@ -38,7 +38,7 @@ struct ChangePassword: View {
     
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
+            Color.white.ignoresSafeArea()
             VStack(spacing: 0) {
                VStack {
                     header
@@ -55,10 +55,20 @@ struct ChangePassword: View {
                                 .font(.caption)
                                 .foregroundStyle(Color.theme.gray)
                             
-                            TextField("Enter account email", text: $emailText)
-                                .padding(12)
-                                .background(Color.theme.lightGray.opacity(0.15))
-                                .cornerRadius(12)
+                            HStack(spacing: 8) {
+                                Image(systemName: "envelope")
+                                    .foregroundStyle(Color.theme.darkBlue)
+                                TextField("Enter account email", text: $emailText)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .onChange(of: emailText) {
+                                        emailText = emailText.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\t", with: "")
+                                            .replacingOccurrences(of: "\n", with: "")
+                                        
+                                    }
+                            }
+                            .padding(14)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 18))
                         }
                         
                         // MARK: - Current Password
@@ -75,7 +85,7 @@ struct ChangePassword: View {
                                         SecureField("Enter current password", text: $currentPassword)
                                     }
                                 }
-                                .frame(height: 20) // <-- Add this
+                                .frame(height: 20)
                                 
                                 Button {
                                     showCurrentPassword.toggle()
@@ -85,9 +95,8 @@ struct ChangePassword: View {
                                         .frame(height: 20)
                                 }
                             }
-                            .padding(12)
-                            .background(Color.theme.lightGray.opacity(0.15))
-                            .cornerRadius(12)
+                            .padding(14)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 18))
                         }
 
                         // MARK: - New Password
@@ -104,9 +113,12 @@ struct ChangePassword: View {
                                         SecureField("Enter new password", text: $newPassword)
                                     }
                                 }
-                                .frame(height: 20) // <-- Add this
+                                .frame(height: 20)
                                 .onChange(of: newPassword) {
-                                   isNewPasswordValid = validatePassword(newPassword)
+                                    newPassword = newPassword.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\t", with: "")
+                                        .replacingOccurrences(of: "\n", with: "")
+                                    newPassword = String(newPassword.prefix(16))
+                                    isNewPasswordValid = validatePassword(newPassword)
                                 }
                                 
                                 Button {
@@ -117,9 +129,8 @@ struct ChangePassword: View {
                                         .frame(height: 20)
                                 }
                             }
-                            .padding(12)
-                            .background(Color.theme.lightGray.opacity(0.15))
-                            .cornerRadius(12)
+                            .padding(14)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 18))
                             
                             VStack(alignment: .leading, spacing: 4){
                                 HStack {
@@ -194,30 +205,19 @@ struct ChangePassword: View {
                                 await submitPasswordChange()
                             }
                         } label: {
-                            if !isSubmitting {
-                                Text("Confirm Password Change")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        Capsule()
-                                            .fill(Color.theme.darkBlue)
-                                    )
-                            } else {
-                                HStack {
-                                    Spacer()
-                                    CircularLoadingView(color: Color.theme.white)
-                                        .frame(width: 20, height: 20)
-                                    Spacer()
+                            ZStack {
+                                if isSubmitting {
+                                    ProgressView().tint(Color.theme.white)
+                                } else {
+                                    Text("Confirm Password Change")
+                                        .font(.headline)
+                                        .foregroundStyle(Color.theme.white)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.theme.darkBlue)
-                                )
                             }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 22))
+                            .shadow(color: Color.black.opacity(0.18), radius: 12, y: 6)
                         }
                         .disabled(currentPassword.isEmpty || newPassword.isEmpty || isSubmitting || !isNewPasswordValid)
                         .opacity(currentPassword.isEmpty || newPassword.isEmpty || !isNewPasswordValid ? 0.5 : 1)
@@ -244,11 +244,13 @@ struct ChangePassword: View {
     }
     
     var header: some View {
-        VStack {
+        VStack(spacing: 0) {
             HStack(spacing: 0){
                 Image(systemName: "chevron.left")
                     .font(.title3)
-                    .padding(.trailing, 8)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .glassEffect(.regular.interactive())
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             UIApplication.shared.endEditing()
@@ -261,14 +263,14 @@ struct ChangePassword: View {
                 Spacer()
                 Image(systemName: "chevron.left")
                     .font(.headline)
-                    .padding(.trailing, 8)
                     .opacity(0)
+                    .frame(width: 44, height: 44)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
-            Divider()
         }
         .frame(height: 55)
+        .background(Color.white)
     }
     
     
@@ -356,16 +358,19 @@ struct ForgotPasswordSheet: View {
                         .font(.caption)
                         .foregroundStyle(Color.theme.gray)
                     
-                    TextField("Enter your email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                        .autocorrectionDisabled()
-                        .padding(12)
-                        .background(Color.theme.lightGray.opacity(0.15))
-                        .cornerRadius(12)
-                        .onChange(of: email) {
-                            emailIsValid = validateEmail(email)
-                        }
+                    HStack(spacing: 8) {
+                        Image(systemName: "envelope")
+                            .foregroundStyle(Color.theme.darkBlue)
+                        TextField("Enter your email", text: $email)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
+                            .autocorrectionDisabled()
+                            .onChange(of: email) {
+                                emailIsValid = validateEmail(email)
+                            }
+                    }
+                    .padding(14)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 18))
                     
                     Text("Invalid Format")
                         .font(.caption)
@@ -391,31 +396,18 @@ struct ForgotPasswordSheet: View {
                         await sendReset()
                     }
                 } label: {
-                    if !isLoading {
-                        Text("Send Reset Email")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                Capsule()
-                                    .fill(Color.theme.darkBlue)
-                            )
-                    }
-                    else {
-                        HStack {
-                            Spacer()
-                            CircularLoadingView(color: Color.theme.white)
-                                .frame(width: 20, height: 20)
-                            Spacer()
+                    ZStack {
+                        if !isLoading {
+                            Text("Send Reset Email")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        } else {
+                            ProgressView().tint(Color.theme.white)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            Capsule()
-                                .fill(Color.theme.darkBlue)
-                        )
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 22))
                 }
                 .disabled(email.isEmpty || isLoading || !emailIsValid)
                 .opacity(email.isEmpty || !emailIsValid ? 0.5 : 1)
@@ -423,7 +415,7 @@ struct ForgotPasswordSheet: View {
             }
             .padding()
         }
-        .background(Color.theme.background.ignoresSafeArea())
+        .background(Color.white.ignoresSafeArea())
         .presentationDetents([.medium])
     }
     

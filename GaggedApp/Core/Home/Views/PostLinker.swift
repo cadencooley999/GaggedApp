@@ -26,7 +26,7 @@ struct PostLinker: View {
     
     var body: some View {
         ZStack {
-            Color.theme.background
+            Color(.systemGroupedBackground)
                 .ignoresSafeArea()
             if searchViewModel.isLoading {
                 CircularLoadingView(color: Color.theme.darkBlue)
@@ -46,14 +46,10 @@ struct PostLinker: View {
                     UIApplication.shared.endEditing()
                 }
             })
-            VStack {
-                Spacer()
-                attachButton
-            }
-            .padding()
         }
         .edgesIgnoringSafeArea(.bottom)
         .task {
+            print("postlinkertask")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: {
                 searchViewModel.addSubscribers {
                     locationManager.citiesInRange
@@ -64,32 +60,34 @@ struct PostLinker: View {
     }
     
     var attachButton: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .frame(width: 100, height: 50)
-                .foregroundStyle(Color.theme.orange.opacity(postToLink == nil ? 0.3 : 1.0))
+        let isEnabled = postToLink != nil
+        return HStack {
+            Image(systemName: "link")
             Text("Attach")
-                .font(.headline)
-                .foregroundStyle(Color.theme.white)
         }
+        .font(.subheadline.bold())
+        .foregroundStyle(.white)
+        .padding(12)
+        .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 16))
+        .glassEffectTransition(.materialize)
         .onTapGesture {
-            if postToLink != nil {
-                linkedPost = postToLink
-                UIApplication.shared.endEditing()
-                showPostPicker = false
-            }
+            guard isEnabled else { return }
+            linkedPost = postToLink
+            UIApplication.shared.endEditing()
+            showPostPicker = false
         }
     }
     
     var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Image(systemName: "chevron.left")
                 .font(.title3)
+                .foregroundStyle(Color.theme.gray)
                 .onTapGesture {
                     showPostPicker = false
                 }
-            HStack(spacing: 8) {
 
+            HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -97,15 +95,15 @@ struct PostLinker: View {
                 TextField("Search Posts...", text: $searchViewModel.searchText)
                     .textFieldStyle(.plain)
                     .font(.body)
+                    .focused($isFocused)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(
-                Color.theme.lightGray
-                    .opacity(0.2)
-                    .cornerRadius(16)
-            )
-            .padding(.horizontal, 8)
+            .glassEffect(.regular, in: .rect(cornerRadius: 16))
+            .glassEffectTransition(.identity)
+            if postToLink != nil {
+                attachButton
+            }
         }
     }
     
@@ -117,7 +115,7 @@ struct PostLinker: View {
     
     var postFeed: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
+            Color(.systemGroupedBackground).ignoresSafeArea()
             HStack {
                 ForEach(0..<searchViewModel.columns) { x in
                     VStack {
@@ -129,7 +127,13 @@ struct PostLinker: View {
                                         .contentShape(Rectangle())
                                         .transition(.opacity)
                                         .onTapGesture {
-                                            postToLink = post
+                                            withAnimation(.easeInOut(duration: 0.4)) {
+                                                if postToLink == post {
+                                                    postToLink = nil
+                                                } else {
+                                                    postToLink = post
+                                                }
+                                            }
                                         }
                                         
                                 }

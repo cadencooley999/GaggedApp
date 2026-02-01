@@ -25,53 +25,61 @@ final class LeaderViewModel: ObservableObject {
     @Published var allTimeUp: [PostModel] = []
     @Published var thisWeekUp: [PostModel] = []
     @Published var allTimeDown: [PostModel] = []
+    @Published var weekStats: [Int] = []
     @Published var isLoading: Bool = false
     
     let postManager = FirebasePostManager.shared
     
     func fetchLeaderboardsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
-        isLoading = true
-        async let allUp = postManager.getTopUpsAllTime(from: cities)
-        async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
-        async let allDown = postManager.getTopDownsAllTime(from: cities)
+        self.isLoading = true
+        defer {self.isLoading = false}
+        do {
+            async let allUp = postManager.getTopUpsAllTime(from: cities)
+            async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
+            async let allDown = postManager.getTopDownsAllTime(from: cities)
 
-        let (up, week, down) = try await (allUp, thisWeek, allDown)
+            let (up, week, down) = try await (allUp, thisWeek, allDown)
 
-        allTimeUp = up
-        thisWeekUp = week
-        allTimeDown = down
-        hasLoaded = true
-        isLoading = false
+            allTimeUp = up
+            thisWeekUp = week.0
+            allTimeDown = down
+            
+            weekStats = week.1
+        } catch {
+            throw NetworkErrors.ErrorFetching
+        }
     }
     
     func fetchMoreLeaderboards(cities: [String]) async throws {
-        print("GEtting leaders")
-        isLoading = true
+        self.isLoading = true
+        defer {
+            self.isLoading = false
+        }
+        
+        allTimeUp.removeAll()
+        thisWeekUp.removeAll()
+        allTimeDown.removeAll()
+        
         async let allUp = postManager.getTopUpsAllTime(from: cities)
         async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
         async let allDown = postManager.getTopDownsAllTime(from: cities)
 
-        let (up, week, down) = try await (allUp, thisWeek, allDown)
-
-        allTimeUp = up
-        thisWeekUp = week
-        allTimeDown = down
-        isLoading = false
+        do {
+            let (up, week, down) = try await (allUp, thisWeek, allDown)
+            
+            allTimeUp.append(contentsOf: up)
+            thisWeekUp.append(contentsOf: week.0)
+            allTimeDown.append(contentsOf: down)
+            
+            weekStats = week.1
+        } catch {
+            throw NetworkErrors.ErrorFetching
+        }
     }
     
-    func getUpStat(index: Int, list: rankList) -> Int? {
-//        switch list {
-//        case .allTimeUp:
-//            guard allTimeUp.indices.contains(index) else { return nil }
-//            return allTimeUp[index].upvotes
-//        case .thisWeekUp:
-//            guard thisWeekUp.indices.contains(index) else { return nil }
-//            return thisWeekUp[index].upvotesThisWeek
-//        case .allTimeDown:
-//            guard allTimeDown.indices.contains(index) else { return nil }
-//            return allTimeDown[index].downvotes
-//        }
+    func getUpStat(index: Int) -> Int? {
+
         return 0
     }
 }
