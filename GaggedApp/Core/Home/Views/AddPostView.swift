@@ -22,6 +22,7 @@ struct UIPollOption: Identifiable {
 enum FieldToScroll: Hashable {
     case caption
     case option(UUID)
+    case name
 }
 
 struct AddPostView: View {
@@ -40,6 +41,7 @@ struct AddPostView: View {
     @AppStorage("username") var username: String = ""
     
     @Binding var showAddPostView: Bool
+    @Binding var selectedTab: TabBarItem
     
     @State var captionText: String = ""
     @State var nameText: String = ""
@@ -78,7 +80,7 @@ struct AddPostView: View {
     
     private var cropSize: CGSize {
         let width = windowSize.size.width - 64
-        return CGSize(width: width, height: width * cropAspectRatio)
+        return CGSize(width: min(width, 700), height: min(width * cropAspectRatio, 700*cropAspectRatio))
     }
     
     func requestCroppedImage() async -> UIImage {
@@ -90,7 +92,7 @@ struct AddPostView: View {
     
     var body: some View {
         ZStack {
-            Color(.systemGroupedBackground)
+            Background()
                 .ignoresSafeArea()
                 .onTapGesture {
                     UIApplication.shared.endEditing()
@@ -98,21 +100,15 @@ struct AddPostView: View {
             VStack(spacing: 0){
                 
                 if vm.currentNewContent == .post && !photoSelected {
-                    ScrollViewReader { proxy in
-                        ScrollView(showsIndicators: false) {
-                            VStack(spacing: 16) {
-                                VStack {
-                                    imageSection
-                                        .onTapGesture { UIApplication.shared.endEditing() }
-                                        .clipped()
-                                        .padding(.top, 104)
-                                    nextButton
-                                    Spacer()
-                                }
-                            }
-                        }
-                        .onScrollPhaseChange { oldPhase, newPhase in
-                            if newPhase == .interacting { UIApplication.shared.endEditing() }
+                    VStack(spacing: 16) {
+                        VStack {
+                            Spacer()
+                            imageSection
+                                .onTapGesture { UIApplication.shared.endEditing() }
+                                .clipped()
+                            nextButton
+                                .padding(.top)
+                            Spacer()
                         }
                     }
                 }
@@ -122,8 +118,9 @@ struct AddPostView: View {
                         ScrollView(showsIndicators: false) {
                             VStack(spacing: 16) {
                                 imagePreviewSection
-                                    .padding(.top, 64)
+                                    .padding(.top, 72)
                                 nameSection
+                                    .id("name")
                                 citySection
                                 captionSection
                                     .id("caption")
@@ -146,6 +143,8 @@ struct AddPostView: View {
                                     switch newValue {
                                     case .caption:
                                         proxy.scrollTo("caption", anchor: .center)
+                                    case .name:
+                                        proxy.scrollTo("name", anchor: .center)
                                     case .option(let id):
                                         proxy.scrollTo("option_\(id.uuidString)", anchor: .center)
                                     }
@@ -164,10 +163,6 @@ struct AddPostView: View {
                                         TextField("Ask a question…", text: $pollTitle)
                                             .font(.body)
                                             .padding()
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.white)
-                                            )
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 12)
                                                     .stroke(Color.theme.lightGray, lineWidth: 1)
@@ -224,10 +219,6 @@ struct AddPostView: View {
                                         TextEditor(text: $pollContext)
                                             .frame(minHeight: 90)
                                             .padding(10)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.white)
-                                            )
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 12)
                                                     .stroke(Color.theme.lightGray, lineWidth: 1)
@@ -235,6 +226,7 @@ struct AddPostView: View {
                                             .onChange(of: pollContext) { newValue in
                                                 if newValue.count > contextLimit { pollContext = String(newValue.prefix(contextLimit)) }
                                             }
+                                            .scrollContentBackground(.hidden)
                                         HStack {
                                             Spacer()
                                             Text("\(pollContext.count)/\(contextLimit)")
@@ -257,10 +249,6 @@ struct AddPostView: View {
                                                             .id("option_\(option.id.uuidString)")
                                                             .focused($focusedField, equals: .option(option.id))
                                                             .padding()
-                                                            .background(
-                                                                RoundedRectangle(cornerRadius: 12)
-                                                                    .fill(Color.white)
-                                                            )
                                                             .overlay(
                                                                 RoundedRectangle(cornerRadius: 12)
                                                                     .stroke(Color.theme.lightGray, lineWidth: 1)
@@ -320,7 +308,7 @@ struct AddPostView: View {
                                 }
                                 .id("option")
                             }
-                            .padding(.bottom, 64 + keyboard.keyboardHeight)
+                            .padding(.bottom, 88 + keyboard.keyboardHeight)
                         }
                         .onScrollPhaseChange { oldPhase, newPhase in
                             if newPhase == .interacting { UIApplication.shared.endEditing() }
@@ -332,6 +320,8 @@ struct AddPostView: View {
                                     switch newValue {
                                     case .caption:
                                         proxy.scrollTo("caption", anchor: .center)
+                                    case .name:
+                                        proxy.scrollTo("name", anchor: .center)
                                     case .option(let id):
                                         proxy.scrollTo("option_\(id.uuidString)", anchor: .center)
                                     }
@@ -348,6 +338,7 @@ struct AddPostView: View {
                     // 👇 visual-only blur layer
                     Rectangle()
                         .fill(.thinMaterial)
+                        .overlay(Color.theme.background.opacity(0.9))
                         .mask(
                             LinearGradient(
                                 stops: [
@@ -361,7 +352,7 @@ struct AddPostView: View {
                                 endPoint: .bottom
                             )
                         )
-                        .frame(height: 180)
+                        .frame(height: 140)
                         .ignoresSafeArea(edges: .top)
                         .allowsHitTesting(false)   // 👈 SAFE now
 
@@ -378,10 +369,8 @@ struct AddPostView: View {
             Spacer()
             if (vm.currentNewContent == .post && photoSelected) || (vm.currentNewContent == .poll) {
                 HStack {
-                    Spacer()
                     submitButton
-                        .frame(maxWidth: 360)
-                    Spacer()
+                        .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
@@ -428,10 +417,6 @@ struct AddPostView: View {
                     .focused($focusedField, equals: .caption)
                     .padding()
                     .frame(minHeight: 120, alignment: .topLeading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white)
-                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.theme.lightGray, lineWidth: 1)
@@ -450,6 +435,9 @@ struct AddPostView: View {
                 }
                 .padding(.horizontal, 4)
             }
+        }
+        .onTapGesture {
+            focusedField = .caption
         }
     }
     
@@ -474,6 +462,7 @@ struct AddPostView: View {
             }
         } toolbar: {
             Button {
+                UIApplication.shared.endEditing()
                 showTagSheet = true
             } label: {
                 HStack(spacing: 6) {
@@ -496,16 +485,13 @@ struct AddPostView: View {
                         .foregroundStyle(Color.theme.darkBlue)
                     TextField("First name only please...", text: $nameText)
                         .font(.body)
+                        .focused($focusedField, equals: .name)
                         .onChange(of: nameText) { newValue in
                             let new = newValue.replacingOccurrences(of: " ", with: "")
                             nameText = String(new.prefix(nameLimit))
                         }
                 }
                 .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.white)
-                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Color.theme.lightGray.opacity(0.5), lineWidth: 1)
@@ -568,9 +554,9 @@ struct AddPostView: View {
                                     }
                                     .padding(.leading, 4)
                             }
-                            .foregroundStyle(Color.white)
                             .font(.caption)
                             .fontWeight(.semibold)
+                            .foregroundStyle(Color.theme.background)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(LinearGradient(colors: [Color.theme.darkBlue, Color.theme.darkBlue.opacity(0.95)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -764,7 +750,7 @@ struct AddPostView: View {
             Text(title)
                 .font(.subheadline.bold())
                 .foregroundColor(Color.theme.darkBlue)
-                .padding(.vertical, 6)
+                .padding(.vertical, 12)
                 .padding(.horizontal)
         }
         .contentShape(Capsule())
@@ -784,15 +770,25 @@ struct AddPostView: View {
                 Image(systemName: "arrow.right")
             }
             .font(.subheadline)
-            .foregroundColor(.white)
+            .foregroundColor(vm.pickedImage == nil ? Color.theme.lightGray : Color.theme.background)
             .frame(maxWidth: 100)
             .padding(.vertical, 8)
             .background(
-                Capsule()
-                    .fill(vm.pickedImage == nil ? Color.theme.lightGray.opacity(0.25) : Color.theme.darkBlue)
-                    .shadow(color: Color.black.opacity(0.15),
-                            radius: 4,
-                            y: 2)
+                Group {
+                    if vm.pickedImage == nil {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                            .shadow(color: Color.black.opacity(0.02),
+                                    radius: 4,
+                                    y: 2)
+                    } else {
+                        Capsule()
+                            .fill(Color.theme.darkBlue)
+                            .shadow(color: Color.black.opacity(0.02),
+                                    radius: 4,
+                                    y: 2)
+                    }
+                }
             )
         }
         .buttonStyle(.plain)
@@ -840,7 +836,7 @@ struct AddPostView: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.headline)
-                            .foregroundColor(Color.theme.gray)
+                            .foregroundColor(Color.theme.trashcanGray)
                             .frame(width: 32, height: 32)
                             .padding(4)
                             .glassEffect(.regular.interactive())
@@ -880,9 +876,6 @@ struct AddPostView: View {
                 }
             }
             .padding(.horizontal)
-            if vm.pickedImage != nil {
-
-            }
         }
     }
     
@@ -912,7 +905,7 @@ struct AddPostView: View {
     var submitButton: some View {
         let isEnabled = vm.currentNewContent == .poll
         ? (pollTitle != "" && !(pollOptions.contains { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) == "" }))
-            : ((captionText != "" && vm.pickedImage != nil && nameText != "" && vm.selectedCities.count > 0))
+        : ((captionText.trimmingCharacters(in: .whitespacesAndNewlines) != "" && vm.pickedImage != nil && nameText != "" && vm.selectedCities.count > 0))
 
         return Button {
             guard isEnabled && !isLoading else { return }
@@ -922,26 +915,26 @@ struct AddPostView: View {
                 if let result = successful {
                     if result {
                         Image(systemName: "checkmark")
-                            .foregroundStyle(Color.theme.white)
+                            .foregroundStyle(Color.theme.background)
                             .font(.headline)
                     } else {
                         HStack(spacing: 6) {
                             Image(systemName: "xmark")
-                                .foregroundStyle(Color.theme.brightRed)
+                                .foregroundStyle(Color.theme.background)
                             Text("Post failed, try again")
                                 .font(.headline)
-                                .foregroundStyle(Color.theme.brightRed)
+                                .foregroundStyle(Color.theme.background)
                         }
                     }
                 } else if isLoading {
                     ProgressView()
-                        .tint(Color.theme.white)
+                        .tint(Color.theme.background)
                 } else {
                     HStack(spacing: 8) {
                         Image(systemName: "paperplane.fill")
                         Text("Post")
                     }
-                    .foregroundStyle(isEnabled ? Color.theme.white : Color.theme.lightGray.opacity(0.75))
+                    .foregroundStyle(isEnabled ? Color.theme.background : Color.theme.lightGray.opacity(0.75))
                     .font(.headline)
                 }
             }
@@ -954,13 +947,13 @@ struct AddPostView: View {
                     .fill(
                         isEnabled
                         ? LinearGradient(colors: [Color.theme.darkBlue.opacity(0.95), Color.theme.darkBlue.opacity(0.90)], startPoint: .top, endPoint: .bottom)
-                        : LinearGradient(colors: [Color.white], startPoint: .top, endPoint: .top)
+                        : LinearGradient(colors: [Color.theme.background], startPoint: .top, endPoint: .top)
                     )
             )
             .overlay(
                 Capsule()
                     .stroke(
-                        isEnabled ? Color.theme.darkBlue.opacity(0.55) : Color.white.opacity(0.18),
+                        isEnabled ? Color.theme.darkBlue.opacity(0.55) : Color.theme.background.opacity(0.18),
                         lineWidth: 1
                     )
             )
@@ -974,7 +967,7 @@ struct AddPostView: View {
     
     func submit() {
         if vm.currentNewContent == .post {
-            if captionText != "" && vm.pickedImage != nil && !vm.selectedCities.isEmpty && nameText != "" {
+            if captionText.trimmingCharacters(in: .whitespacesAndNewlines) != "" && vm.pickedImage != nil && !vm.selectedCities.isEmpty && nameText != "" {
                 Task {
                     if let photo = selectedPhoto {
                         isLoading = true
@@ -987,11 +980,13 @@ struct AddPostView: View {
                         if successful == true {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
                                 successful = nil
+                                print("loading more")
                                 Task {
-                                    try await homeVm.fetchMorePosts(cities: locationManager.citiesInRange)
+                                    await homeVm.loadInitialPostFeed(cityIds: locationManager.citiesInRange)
                                 }
-                                withAnimation(.bouncy(duration: 0.2)) {
+                                withAnimation(.easeInOut(duration: 0.3)) {
                                     showAddPostView = false
+                                    selectedTab = TabBarItem(iconName: "HomeIcon", title: "Home")
                                 }
                                 clearTextFields()
                             })
@@ -1017,10 +1012,11 @@ struct AddPostView: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
                                 successful = nil
                                 Task {
-                                    try await pollsViewModel.getMorePolls(cityIds: locationManager.citiesInRange)
+                                    try await pollsViewModel.getInitialPolls(cityIds: locationManager.citiesInRange)
                                 }
-                                withAnimation(.bouncy(duration: 0.2)) {
+                                withAnimation(.easeInOut(duration: 0.3)) {
                                     showAddPostView = false
+                                    selectedTab = TabBarItem(iconName: "PollIcon", title: "Polls")
                                 }
                                 clearTextFields()
                             })
@@ -1074,7 +1070,8 @@ private struct SectionCard<Content: View, Toolbar: View>: View {
             content
         }
         .padding(16)
-        .background(Color.white)
+        .background(Rectangle()
+            .fill(.ultraThinMaterial))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1202,18 +1199,18 @@ struct CropImageView: View {
             // vertical lines
             HStack {
                 Spacer()
-                Rectangle().fill(Color.white.opacity(0.8)).frame(width: 1)
+                Rectangle().fill(Color.theme.background.opacity(0.8)).frame(width: 1)
                 Spacer()
-                Rectangle().fill(Color.white.opacity(0.8)).frame(width: 1)
+                Rectangle().fill(Color.theme.background.opacity(0.8)).frame(width: 1)
                 Spacer()
             }
 
             // horizontal lines
             VStack {
                 Spacer()
-                Rectangle().fill(Color.white.opacity(0.8)).frame(height: 1)
+                Rectangle().fill(Color.theme.background.opacity(0.8)).frame(height: 1)
                 Spacer()
-                Rectangle().fill(Color.white.opacity(0.8)).frame(height: 1)
+                Rectangle().fill(Color.theme.background.opacity(0.8)).frame(height: 1)
                 Spacer()
             }
         }

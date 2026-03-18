@@ -34,26 +34,27 @@ struct ChangePassword: View {
     @State var passwordLength: Bool = false
     @State var isNewPasswordValid: Bool = false
     
+    @FocusState private var passwordFocus: PasswordFieldFocus?
+    enum PasswordFieldFocus: Hashable { case current, new }
+    
     let userManager = UserManager.shared
     
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
-            VStack(spacing: 0) {
-               VStack {
-                    header
+            Color.theme.background.ignoresSafeArea()
+            VStack {
+                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 20) {
-                        
                         // Subtitle / Requirements
                         Text("Your password must be at least 8 characters long, including a number and capital letter")
                             .font(.caption)
-                            .foregroundStyle(Color.theme.gray)
+                            .foregroundStyle(Color.theme.trashcanGray)
                             .fixedSize(horizontal: false, vertical: true)
                         
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Email")
                                 .font(.caption)
-                                .foregroundStyle(Color.theme.gray)
+                                .foregroundStyle(Color.theme.trashcanGray)
                             
                             HStack(spacing: 8) {
                                 Image(systemName: "envelope")
@@ -64,7 +65,6 @@ struct ChangePassword: View {
                                     .onChange(of: emailText) {
                                         emailText = emailText.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\t", with: "")
                                             .replacingOccurrences(of: "\n", with: "")
-                                        
                                     }
                             }
                             .padding(14)
@@ -75,23 +75,25 @@ struct ChangePassword: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Current Password")
                                 .font(.caption)
-                                .foregroundStyle(Color.theme.gray)
+                                .foregroundStyle(Color.theme.trashcanGray)
                             
                             HStack {
-                                Group {
-                                    if showCurrentPassword {
-                                        TextField("Enter current password", text: $currentPassword)
-                                    } else {
-                                        SecureField("Enter current password", text: $currentPassword)
-                                    }
+                                ZStack {
+                                    TextField("Enter current password", text: $currentPassword)
+                                        .focused($passwordFocus, equals: .current)
+                                        .opacity(showCurrentPassword ? 1 : 0)
+                                    SecureField("Enter current password", text: $currentPassword)
+                                        .focused($passwordFocus, equals: .current)
+                                        .opacity(showCurrentPassword ? 0 : 1)
                                 }
+                                .submitLabel(.done)
                                 .frame(height: 20)
                                 
                                 Button {
                                     showCurrentPassword.toggle()
                                 } label: {
                                     Image(systemName: showCurrentPassword ? "eye" : "eye.slash")
-                                        .foregroundColor(Color.theme.gray)
+                                        .foregroundColor(Color.theme.trashcanGray)
                                         .frame(height: 20)
                                 }
                             }
@@ -103,16 +105,18 @@ struct ChangePassword: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("New Password")
                                 .font(.caption)
-                                .foregroundStyle(Color.theme.gray)
+                                .foregroundStyle(Color.theme.trashcanGray)
                             
                             HStack {
-                                Group {
-                                    if showNewPassword {
-                                        TextField("Enter new password", text: $newPassword)
-                                    } else {
-                                        SecureField("Enter new password", text: $newPassword)
-                                    }
+                                ZStack {
+                                    TextField("Enter new password", text: $newPassword)
+                                        .focused($passwordFocus, equals: .new)
+                                        .opacity(showNewPassword ? 1 : 0)
+                                    SecureField("Enter new password", text: $newPassword)
+                                        .focused($passwordFocus, equals: .new)
+                                        .opacity(showNewPassword ? 0 : 1)
                                 }
+                                .submitLabel(.done)
                                 .frame(height: 20)
                                 .onChange(of: newPassword) {
                                     newPassword = newPassword.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\t", with: "")
@@ -125,7 +129,7 @@ struct ChangePassword: View {
                                     showNewPassword.toggle()
                                 } label: {
                                     Image(systemName: showNewPassword ? "eye" : "eye.slash")
-                                        .foregroundColor(Color.theme.gray)
+                                        .foregroundColor(Color.theme.trashcanGray)
                                         .frame(height: 20)
                                 }
                             }
@@ -140,7 +144,7 @@ struct ChangePassword: View {
                                             .font(.footnote)
                                     } else {
                                         Image(systemName: "xmark")
-                                            .foregroundStyle(Color.theme.gray)
+                                            .foregroundStyle(Color.theme.trashcanGray)
                                             .font(.footnote)
                                     }
                                     Text("8 characters")
@@ -155,7 +159,7 @@ struct ChangePassword: View {
                                             .font(.footnote)
                                     } else {
                                         Image(systemName: "xmark")
-                                            .foregroundStyle(Color.theme.gray)
+                                            .foregroundStyle(Color.theme.trashcanGray)
                                             .font(.footnote)
                                     }
                                     Text("Number")
@@ -170,7 +174,7 @@ struct ChangePassword: View {
                                             .font(.footnote)
                                     } else {
                                         Image(systemName: "xmark")
-                                            .foregroundStyle(Color.theme.gray)
+                                            .foregroundStyle(Color.theme.trashcanGray)
                                             .font(.footnote)
                                     }
                                     Text("Capital Letter")
@@ -192,7 +196,6 @@ struct ChangePassword: View {
                         .padding(.bottom)
 
                         // Confirm Button
-                        
                         if resultText != "" {
                             Text(resultText)
                                 .font(.caption)
@@ -201,36 +204,52 @@ struct ChangePassword: View {
                         }
                         
                         Button {
-                            Task {
-                                await submitPasswordChange()
-                            }
+                            Task { await submitPasswordChange() }
                         } label: {
                             ZStack {
                                 if isSubmitting {
-                                    ProgressView().tint(Color.theme.white)
+                                    ProgressView().tint(Color.theme.background)
                                 } else {
                                     Text("Confirm Password Change")
                                         .font(.headline)
-                                        .foregroundStyle(Color.theme.white)
+                                        .foregroundStyle(Color.theme.background)
                                 }
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 18)
+                            .frame(height: 44)
                             .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 22))
                             .shadow(color: Color.black.opacity(0.18), radius: 12, y: 6)
                         }
                         .disabled(currentPassword.isEmpty || newPassword.isEmpty || isSubmitting || !isNewPasswordValid)
                         .opacity(currentPassword.isEmpty || newPassword.isEmpty || !isNewPasswordValid ? 0.5 : 1)
-                        
                     }
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.top, 72)
+                    .padding(.bottom, 100)
                 }
-               .gesture(
-                   DragGesture()
-                       .onEnded { _ in
-                           UIApplication.shared.endEditing()
-                       }
-               )
+                .onScrollPhaseChange({ oldPhase, newPhase in
+                    if newPhase == .interacting {
+                        UIApplication.shared.endEditing()
+                    }
+                })
+            }
+
+            // Header overlay with blur pinned to top
+            VStack {
+                ZStack(alignment: .top) {
+                    VStack {
+                        BackgroundHelper.shared.appleHeaderBlur.frame(height: 92)
+                        Spacer()
+                    }
+                    VStack {
+                        header
+                            .frame(height: 55)
+                            .zIndex(1)
+                        Spacer()
+                    }
+                }
                 Spacer()
             }
         }
@@ -270,7 +289,6 @@ struct ChangePassword: View {
             .padding(.bottom, 8)
         }
         .frame(height: 55)
-        .background(Color.white)
     }
     
     
@@ -316,6 +334,7 @@ struct ForgotPasswordSheet: View {
     @State private var isLoading = false
     @State private var message: String = ""
     @State var emailIsValid: Bool = true
+    @State var timeout: Bool = true
     
     func validateEmail(_ email: String) -> Bool {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
@@ -350,13 +369,13 @@ struct ForgotPasswordSheet: View {
                 
                 Text("Enter your email and we’ll send you a password reset link.")
                     .font(.caption)
-                    .foregroundStyle(Color.theme.gray)
+                    .foregroundStyle(Color.theme.trashcanGray)
                 
                 // Email Field
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Email")
                         .font(.caption)
-                        .foregroundStyle(Color.theme.gray)
+                        .foregroundStyle(Color.theme.trashcanGray)
                     
                     HStack(spacing: 8) {
                         Image(systemName: "envelope")
@@ -400,9 +419,9 @@ struct ForgotPasswordSheet: View {
                         if !isLoading {
                             Text("Send Reset Email")
                                 .font(.headline)
-                                .foregroundColor(.white)
+                                .foregroundColor(Color.theme.background)
                         } else {
-                            ProgressView().tint(Color.theme.white)
+                            ProgressView().tint(Color.theme.background)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -415,17 +434,20 @@ struct ForgotPasswordSheet: View {
             }
             .padding()
         }
-        .background(Color.white.ignoresSafeArea())
+        .background(Color.theme.background.ignoresSafeArea())
         .presentationDetents([.medium])
     }
     
     private func sendReset() async {
         isLoading = true
         defer { isLoading = false }
-        
         do {
             try await userManager.forgotPassword(email: email)
+            timeout = true
             message = "Reset email sent"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                timeout = false
+            }
         } catch {
             message = error.localizedDescription
         }

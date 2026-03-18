@@ -15,19 +15,21 @@ struct SettingsView: View {
     @EnvironmentObject var windowSize: WindowSize
     @EnvironmentObject var profileViewModel: ProfileViewModel
     
+    @Binding var selectedTab: TabBarItem
     @Binding var showSettingsView: Bool
     
     @State var showDeleteView: Bool = false
     @State var showCitySelector: Bool = false
     @State var showChangePassword: Bool = false
     @State var showChangeUsername: Bool = false
+    @State var showCityNotifPicker: Bool = false
 
     var body: some View {
         ZStack {
             Background()
                 .frame(width: windowSize.size.width, height: windowSize.size.height)
 
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
                     notificationsSection
                     citySection
@@ -41,29 +43,17 @@ struct SettingsView: View {
             // Header overlay with fade like TabHomeView/AddPostView
             VStack {
                 ZStack(alignment: .top) {
-                    Rectangle()
-                        .fill(.thinMaterial)
-                        .mask(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .black, location: 0.0),
-                                    .init(color: .black.opacity(0.9), location: 0.35),
-                                    .init(color: .black.opacity(0.7), location: 0.55),
-                                    .init(color: .black.opacity(0.3), location: 0.75),
-                                    .init(color: .clear, location: 1.0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: 180)
-                        .ignoresSafeArea(edges: .top)
-                        .allowsHitTesting(false)
+                    VStack {
+                        BackgroundHelper.shared.appleHeaderBlur.frame(height: 92)
+                        Spacer()
+                    }
 
-                    header
-                        .zIndex(1)
+                    VStack {
+                        header
+                            .zIndex(1)
+                        Spacer()
+                    }
                 }
-                Spacer()
             }
 
             if showDeleteView {
@@ -72,9 +62,13 @@ struct SettingsView: View {
             }
 
             if showCitySelector {
-                CityPickerView2(dissmissable: true, showCityPickerView: $showCitySelector)
+                CityPickerView2(dissmissable: true, showCityPickerView: $showCitySelector, selectedTab: $selectedTab)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
+            }
+            
+            if showCityNotifPicker {
+                CityPickerView3(showCityPickerView: $showCityNotifPicker)
             }
 
             if showChangePassword {
@@ -92,6 +86,13 @@ struct SettingsView: View {
         .animation(.easeInOut(duration: 0.3), value: showCitySelector)
         .animation(.easeInOut(duration: 0.3), value: showChangePassword)
         .animation(.easeInOut(duration: 0.3), value: showChangeUsername)
+        .task {
+            vm.getNameAlertStateIfNeeded()
+        }
+        .onAppear {
+            print("Getting noti state")
+            vm.getNotiState()
+        }
     }
     
     var header: some View {
@@ -132,7 +133,7 @@ struct SettingsView: View {
             // Section Title
             Text("Location")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(Color.theme.gray)
+                .foregroundColor(Color.theme.trashcanGray)
                 .padding(.horizontal)
             
             VStack(spacing: 0) {
@@ -140,7 +141,7 @@ struct SettingsView: View {
                 // User License Agreement
                 settingsButtonRow(
                     icon: "mappin.and.ellipse",
-                    iconColor: .black,
+                    iconColor: Color.theme.accent,
                     title: "Change City"
                 ) {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -154,7 +155,7 @@ struct SettingsView: View {
                 // User License Agreement
                 settingsButtonRow(
                     icon: "map.circle",
-                    iconColor: .black,
+                    iconColor: Color.theme.accent,
                     title: "Location Permissions"
                 ) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -162,7 +163,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            .background(Color.white)
+            .background(Rectangle().fill(.ultraThinMaterial))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -178,7 +179,7 @@ struct SettingsView: View {
             
             Text("Notifications")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(Color.theme.gray)
+                .foregroundColor(Color.theme.trashcanGray)
                 .padding(.horizontal)
             
             VStack(spacing: 0) {
@@ -205,7 +206,10 @@ struct SettingsView: View {
                     icon: "bell",
                     title: "Enable Notifications",
                     trailing: {
-                        CustomToggle(isOn: $vm.notificationsEnabled)
+                        CustomToggle(isOn: $vm.notificationToggle)
+                            .onTapGesture {
+                                vm.setNotifications()
+                            }
                     }
                 )
                 
@@ -214,28 +218,71 @@ struct SettingsView: View {
                 
                 // --- Name Mentions Toggle ---
                 VStack(spacing: 6) {
-                    settingsRow(
-                        icon: "person.text.rectangle",
-                        title: "When Name Mentioned",
-                        trailing: {
-                            CustomToggle(isOn: $vm.nameMentionNotifications)
+                    HStack(spacing: 12) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.text.rectangle")
+                                .foregroundColor(Color.theme.accent)
+                            Text("When Name Posted")
+                                .foregroundColor(Color.theme.accent)
                         }
-                    )
+
+                        Spacer()
+
+                        CustomToggle(isOn: $vm.nameMentionNotifications)
+                            .onTapGesture {
+                                if (vm.nameMentionCity != nil && vm.nameToWatchFor != "") {
+                                    vm.nameMentionTapped()
+                                }
+                            }
+                            .opacity((vm.nameMentionCity != nil && vm.nameToWatchFor != "") ? 1 : 0.3)
+                    }
+                    .padding()
                     
-                    // Textfield always visible
-                    TextField("Enter name…", text: $vm.nameToWatchFor)
-                        .padding(10)
-                        .background(Color.theme.lightGray.opacity(0.20))
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-                        .opacity(vm.nameMentionNotifications ? 1 : 0.4)
-                        .disabled(!vm.nameMentionNotifications)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    HStack(spacing: 10) {
+                        // City selector chip on the left
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showCityNotifPicker = true
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Text(vm.nameMentionCity == nil ? "Choose City" : vm.nameMentionCity?.city ?? "")
+                                    .foregroundColor(Color.theme.accent)
+                                    .fontWeight(.semibold)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(Color.theme.accent)
+                                    .opacity(0.8)
+                            }
+                            .frame(height: 40)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.theme.lightGray.opacity(0.20))
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        // Name text field on the right
+                        TextField("Enter name…", text: $vm.nameToWatchFor)
+                            .padding(.horizontal, 12)
+                            .frame(height: 40)
+                            .background(Color.theme.lightGray.opacity(0.20))
+                            .cornerRadius(8)
+                            .onChange(of: vm.nameToWatchFor) {
+                                vm.nameToWatchFor = vm.nameToWatchFor.replacingOccurrences(of: " ", with: "")
+                                    .replacingOccurrences(of: "\t", with: "")
+                                    .replacingOccurrences(of: "\n", with: "")
+                            }
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                    .padding(.horizontal)
                 }
+                .opacity(vm.notificationToggle ? 1 : 0.4)
                 .padding(.bottom, 12)
             }
-            .background(Color.white)
+            .background(Rectangle().fill(.ultraThinMaterial))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -251,14 +298,14 @@ struct SettingsView: View {
             
             Text("Account")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(Color.theme.gray)
+                .foregroundColor(Color.theme.trashcanGray)
                 .padding(.horizontal)
             
             VStack(spacing: 0) {
                 
                 // Change Username
                 settingsButtonRow(
-                    icon: "person.badge.key",
+                    icon: "tag.circle",
                     title: "Change Username"
                 ) {
                     showChangeUsername = true
@@ -269,7 +316,7 @@ struct SettingsView: View {
                 
                 // Email & Password
                 settingsButtonRow(
-                    icon: "envelope.badge",
+                    icon: "person.badge.key",
                     title: "Change Password"
                 ) {
                     showChangePassword = true
@@ -315,7 +362,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            .background(Color.white)
+            .background(Rectangle().fill(.ultraThinMaterial))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -332,7 +379,7 @@ struct SettingsView: View {
             // Section Title
             Text("Legal & Notices")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(Color.theme.gray)
+                .foregroundColor(Color.theme.trashcanGray)
                 .padding(.horizontal)
             
             VStack(spacing: 0) {
@@ -340,7 +387,7 @@ struct SettingsView: View {
                 // User License Agreement
                 settingsButtonRow(
                     icon: "doc.text",
-                    iconColor: .black,
+                    iconColor: Color.theme.accent,
                     title: "User License Agreement"
                 ) {
                     // TODO: open ULA view
@@ -352,13 +399,13 @@ struct SettingsView: View {
                 // Privacy Policy
                 settingsButtonRow(
                     icon: "lock.shield",
-                    iconColor: .black,
+                    iconColor: Color.theme.accent,
                     title: "Privacy Policy"
                 ) {
                     // TODO: open privacy view
                 }
             }
-            .background(Color.white)
+            .background(Rectangle().fill(.ultraThinMaterial))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -373,10 +420,10 @@ struct SettingsView: View {
     func settingsRow(icon: String, title: String, trailing: () -> some View) -> some View {
         HStack {
             Image(systemName: icon)
-                .foregroundColor(.black)
+                .foregroundColor(Color.theme.accent)
             
             Text(title)
-                .foregroundColor(.black)
+                .foregroundColor(Color.theme.accent)
             
             Spacer()
             
@@ -499,7 +546,7 @@ struct deletePopUp: View {
                     }) {
                         Text("Delete")
                             .font(.body.weight(.semibold))
-                            .foregroundColor(Color.white)
+                            .foregroundColor(Color.theme.background)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(Color.theme.darkRed)
@@ -527,13 +574,11 @@ struct CustomToggle: View {
                 .frame(width: 44, height: 24)
             
             Circle()
-                .fill(Color.white)
+                .fill(Color.theme.background)
                 .frame(width: 20, height: 20)
                 .offset(x: isOn ? 10 : -10)
                 .animation(.easeInOut(duration: 0.15), value: isOn)
         }
-        .onTapGesture {
-            isOn.toggle()
-        }
     }
 }
+

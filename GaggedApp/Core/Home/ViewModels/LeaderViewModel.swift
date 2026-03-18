@@ -30,6 +30,13 @@ final class LeaderViewModel: ObservableObject {
     
     let postManager = FirebasePostManager.shared
     
+    func reset() {
+        allTimeUp.removeAll()
+        thisWeekUp.removeAll()
+        allTimeDown.removeAll()
+        hasLoaded = false
+    }
+    
     func fetchLeaderboardsIfNeeded(cities: [String]) async throws {
         guard !hasLoaded else {return}
         self.isLoading = true
@@ -52,9 +59,11 @@ final class LeaderViewModel: ObservableObject {
     }
     
     func fetchMoreLeaderboards(cities: [String]) async throws {
+        self.hasLoaded = false
         self.isLoading = true
         defer {
             self.isLoading = false
+            self.hasLoaded = true
         }
         
         allTimeUp.removeAll()

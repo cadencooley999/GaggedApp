@@ -38,5 +38,6 @@ struct TinyPostView: View {
             .padding(8)
         }
         .frame(width: width, height: height)
+        .transition(.opacity)
     }
 }

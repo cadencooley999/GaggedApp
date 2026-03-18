@@ -7,7 +7,7 @@
 import Foundation
 import FirebaseFirestore
 
-struct PollModel: Identifiable {
+struct PollModel: Identifiable, Codable {
     let id: String
     let authorId: String
     let authorName: String
@@ -23,14 +23,27 @@ struct PollModel: Identifiable {
     let keywords: [String]
 }
 
-struct PollOption: Identifiable {
+struct PollOption: Identifiable, Codable, Equatable {
     var id: String
     var text: String
     var voteCount: Int
     var index: Int
 }
 
-struct PollWithOptions {
+struct PollWithOptions: Equatable, Identifiable, Codable {
+    let id: String
     var poll: PollModel
     var options: [PollOption]
+    
+    static func == (lhs: PollWithOptions, rhs: PollWithOptions) -> Bool {
+        return lhs.compositeID == rhs.compositeID
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    var compositeID: String {
+        "\(id)-\(options.count)-\(options.map(\.voteCount))"
+    }
 }

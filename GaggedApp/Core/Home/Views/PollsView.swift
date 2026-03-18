@@ -22,6 +22,10 @@ struct PollsView: View {
     @Binding var hideTabBar: Bool
     @Binding var selectedPost: PostModel?
     @Binding var showPostView: Bool
+    @Binding var selectedPoll: PollWithOptions?
+    @Binding var showPollView: Bool
+    @Binding var showReportView: Bool
+    @Binding var preReportInfo: preReportModel?
     
     @EnvironmentObject var pollsViewModel: PollsViewModel
     @EnvironmentObject var locationManager: LocationManager
@@ -35,34 +39,60 @@ struct PollsView: View {
 //                .ignoresSafeArea()
 //                .frame(width: windowSize.size.width, height: windowSize.size.height)
             ScrollView (showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(pollsViewModel.polls, id: \.poll.id) { poll in
-                        PollCard(poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView)
+                LazyVGrid(columns: pollsViewModel.columns, spacing: 0) {
+                    ForEach(pollsViewModel.polls, id: \.id) { poll in
+                        PollCard(screenType: .pollsFeed, poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
                             .shadow(color: .black.opacity(0.12), radius: 8, y: 6)
+                            .transition(.opacity)
+                            .onTapGesture {
+                                selectedPoll = poll
+                                pollsViewModel.poll = poll
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showPollView = true
+                                }
+                            }
+                            .onAppear {
+                                if poll.id == pollsViewModel.polls.last?.id {
+                                    Task {
+                                        try await pollsViewModel.getMorePolls(cityIds: locationManager.citiesInRange)
+                                    }
+                                }
+                            }
                             .padding(.bottom)
                     }
+                    if pollsViewModel.polls.count == 0 && pollsViewModel.hasLoaded{
+                        Text("No polls available for this location.")
+                            .font(.caption)
+                            .foregroundStyle(Color.theme.trashcanGray)
+                            .padding(.top, 160)
+                    }
+                    if pollsViewModel.isLoading {
+                        ProgressView()
+                            .padding(.top, pollsViewModel.polls.count == 0 ? 128 : 64)
+                    }
                 }
+                .transition(.opacity)
                 .padding(.top, safeArea().top + 16)
-                .padding(.bottom, 72)
+                .padding(.bottom, pollsViewModel.hasMore ? 800 : 104)
                 .padding(.horizontal)
             }
             .refreshable {
                 Task {
-                    try await pollsViewModel.getMorePolls(cityIds: locationManager.citiesInRange)
+                    try await pollsViewModel.getInitialPolls(cityIds: locationManager.citiesInRange)
                 }
             }
             
-            if pollsViewModel.isLoading {
-                ZStack {
-                    Color.clear.ignoresSafeArea()
-                    ProgressView()
-                }
-            }
         }
         .task {
             print("poll task run")
+            if windowSize.size.width > 700 {
+                pollsViewModel.columns = [GridItem(), GridItem()]
+            }
             Task {
-                try await pollsViewModel.getPollsIfNeeded(cityIds: locationManager.citiesInRange)
+                if !pollsViewModel.hasLoaded {
+                    try await pollsViewModel.getInitialPolls(cityIds: locationManager.citiesInRange)
+                }
+                pollsViewModel.hasLoaded = true
             }
         }
 //        .gesture(

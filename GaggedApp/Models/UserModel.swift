@@ -14,6 +14,8 @@ struct UserModel: Identifiable {
     let garma: Int
     let imageAddress: String
     let createdAt: Timestamp
+    let isAdmin: Bool
+    var numPosts: Int
     let keywords: [String]
     
 //    init(id: String, name: String, state: String, country: String, keywords: [String]) {

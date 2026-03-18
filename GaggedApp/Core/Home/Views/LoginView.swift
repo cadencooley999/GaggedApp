@@ -46,8 +46,10 @@ struct LoginView: View {
                         // App Icon
                         Image("AppImage")
                             .resizable()
-                            .frame(width: 200, height: 200)
+                            .frame(width: 172, height: 172)
                             .cornerRadius(22)
+                        
+                            .padding(.vertical)
 
                         // App Title
                         Text("Gagged")
@@ -78,19 +80,15 @@ struct LoginView: View {
                         // Password with eye
                         VStack {
                             HStack {
-                                Group {
-                                    if showPassword {
-                                        TextField("Password", text: $password)
-                                            .focused($emailPassFocused, equals: .password)
-                                    } else {
-                                        SecureField("Password", text: $password)
-                                            .focused($emailPassFocused, equals: .password)
-                                    }
+                                ZStack {
+                                    TextField("Password", text: $password)
+                                        .focused($emailPassFocused, equals: .password)
+                                        .opacity(showPassword ? 1 : 0)
+                                    SecureField("Password", text: $password)
+                                        .focused($emailPassFocused, equals: .password)
+                                        .opacity(showPassword ? 0 : 1)
                                 }
                                 .submitLabel(.done)
-                                .onSubmit {
-                                    UIApplication.shared.endEditing()
-                                }
                                 .frame(height: 20)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
@@ -129,12 +127,15 @@ struct LoginView: View {
                                     password: password
                                 )
                                 failure = !success
-                                if success { isLoggedIn = true }
+                                if success {
+                                    isLoggedIn = true
+                                    UserListenerManager.shared.startListening()
+                                }
                             }
                         } label: {
                             Text("Login")
                                 .font(.headline)
-                                .foregroundColor(.white)
+                                .foregroundColor(Color.theme.background)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
                                 .background(
@@ -170,7 +171,7 @@ struct LoginView: View {
                                 proxy.scrollTo(target.rawValue, anchor: .center)
                             }
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: {
                             isProgrammatic = false
                         })
                     }
@@ -181,12 +182,6 @@ struct LoginView: View {
                 UIApplication.shared.endEditing()
             }
         }
-        .gesture(
-            DragGesture()
-                .onEnded { _ in
-                    UIApplication.shared.endEditing()
-                }
-        )
         .sheet(isPresented: $showResetSheet) {
             // Placeholder – you'll build this later
             ForgotPasswordSheet(showResetSheet: $showResetSheet, userEmail: email)

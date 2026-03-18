@@ -20,6 +20,8 @@ struct miniPostImage: View {
     var body: some View {
         ZStack {
             KFImage(URL(string: url))
+                .setProcessor(DownsamplingImageProcessor(size: CGSize(width: width, height: height)))
+                .cacheOriginalImage()
                 .onFailure { error in
                     print("error", error)
                     isFailed = true
@@ -65,6 +67,8 @@ struct postImage: View {
                     ZStack {
                         ProgressView()
                             .scaledToFill()
+                        Rectangle()
+                            .fill(Color.red)
                     }
                     .frame(height: 350)
                 }
@@ -85,8 +89,8 @@ struct postImage: View {
                 ZStack {
                     ProgressView()
                         .scaledToFill()
+                    PulsingRectangle(duration: Double.random(in: 0.5...1.5))
                 }
-                .frame(height: 350)
             }
             if isFailed {
                 ZStack {

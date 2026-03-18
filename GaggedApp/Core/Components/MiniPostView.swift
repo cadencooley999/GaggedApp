@@ -83,6 +83,7 @@ struct MiniPostView: View {
     var post: PostModel
     let width: CGFloat?
     let stroked: Bool?
+    @State private var postCity: String = ""
     
     @EnvironmentObject var windowSize: WindowSize
     
@@ -155,6 +156,7 @@ struct MiniPostView: View {
 
                                 HStack(spacing: 2) {
                                     Text("\(post.upvotes)")
+                                        .monospacedDigit()
                                     Image(systemName: "arrow.up")
                                         .foregroundColor(Color.theme.darkBlue)
                                 }
@@ -162,6 +164,7 @@ struct MiniPostView: View {
 
                                 HStack(spacing: 2) {
                                     Text("\(post.downvotes)")
+                                        .monospacedDigit()
                                     Image(systemName: "arrow.down")
                                         .foregroundColor(Color.theme.darkRed)
                                 }
@@ -196,7 +199,7 @@ struct MiniPostView: View {
                                     .foregroundColor(Color.theme.darkBlue)
                             }
                             .font(.subheadline.bold())
-
+                            
                             HStack(spacing: 2) {
                                 Text("\(post.downvotes)")
                                 Image(systemName: "arrow.down")
@@ -205,7 +208,7 @@ struct MiniPostView: View {
                             .font(.subheadline.bold())
 
                         }
-                        .padding(.vertical, 4)
+                        .padding(.top, 4)
                         
                         Text(post.name)
                             .font(.subheadline)
@@ -216,9 +219,9 @@ struct MiniPostView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 4)
                         
-                        if let city = CityManager.shared.getCity(id: post.cityIds.first ?? "") {
+                        if !postCity.isEmpty {
                             HStack(spacing: 0){
-                                Text(city.city)
+                                Text(postCity)
                                     .font(.caption2)
                                     .foregroundStyle(Color.theme.gray)
                             }
@@ -234,14 +237,18 @@ struct MiniPostView: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius)
-                .stroke(Color.white.opacity(0.2))
+                .stroke(Color.theme.background.opacity(0.2))
         )
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius)
                 .stroke(Color.theme.darkBlue, lineWidth: stroked == true ? 2 : 0)
         )
         .frame(maxWidth: width != nil ? width : .infinity)
-        .transition(.opacity)
+        .onAppear {
+            if postCity.isEmpty, let id = post.cityIds.first {
+                self.postCity = CityManager.shared.getCity(id: id)?.city ?? ""
+            }
+        }
     }
     
     func textWidth(_ text: String, font: UIFont) -> CGFloat {

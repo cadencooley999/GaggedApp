@@ -21,10 +21,30 @@ final class PostViewModel: ObservableObject {
     @Published var postCities: [City] = []
     @Published var isLoading: Bool = false
     @Published var commentsIsLoading: Bool = false
-    @Published var comments: [viewCommentModel] = []
+    @Published var rootComments: [viewCommentModel] = []
     @Published var upvotedComms: [String] = []
     @Published var userUpvoted: Bool = false
     @Published var userDownvoted: Bool = false
+    @Published var hasMoreComments: Bool = true
+    @Published var upvoteLoading: Bool = false
+    
+    private var rootCommentIDs = Set<String>()
+
+    func appendRootComments(_ new: [viewCommentModel]) {
+        let filtered = new.filter { rootCommentIDs.insert($0.id).inserted }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            rootComments.append(contentsOf: filtered)
+        }
+    }
+    
+    func appendRootComment(_ new: viewCommentModel) {
+        if !rootComments.contains(where: {$0.id == new.id}) {
+            rootCommentIDs.insert(new.id)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                rootComments.append(new)
+            }
+        }
+    }
     
     let postManager = FirebasePostManager.shared
     let commentManager = CommentsManager.shared
@@ -32,6 +52,8 @@ final class PostViewModel: ObservableObject {
     let userManager = UserManager.shared
     let voteManager = VoteManager.shared
     let avatarCacheManager = UserAvatarCache.shared
+    
+    private var commentsCursor: CommentsCursor? = nil
     
     func isSaved(postId: String) async -> Bool {
         let posts = CoreDataManager.shared.getSavedPosts()
@@ -98,15 +120,21 @@ final class PostViewModel: ObservableObject {
             return
         }
         try await postManager.deletePost(postId: postId)
-        
     }
     
-    func deleteComment(commentId: String, postId: String) async throws {
+    func deleteComment(commentId: String, postId: String, ancestorId: String) async throws {
         guard commentId != "" else {
             return
         }
         try await commentManager.deleteComment(commentId: commentId)
-        CommentsCache.shared.deleteComment(commentId: commentId, postId: postId)
+        if ancestorId.isEmpty {
+            rootComments.removeAll(where: {$0.id == commentId})
+        } else {
+            if let idx = rootComments.firstIndex(where: {$0.id == ancestorId}) {
+                rootComments[idx].commentThreadState?.children.removeAll(where: {$0.id == commentId})
+            }
+        }
+        CommentsCache.shared.setCache(coms: rootComments, postId: postId)
     }
     
     func upvote(post: PostModel) async throws {
@@ -157,21 +185,59 @@ final class PostViewModel: ObservableObject {
         }
     }
     
-    func upvoteCom(comId: String) {
-        Task {
-            try await commentManager.upvoteComment(commentId: comId)
-            CoreDataManager.shared.addCommentVote(commentId: comId, postId: post?.id ?? "")
-            upvotedComms.append(comId)
-            comments[comments.firstIndex(where: {$0.id == comId}) ?? 0].comment.upvotes += 1
+    func upvoteCom(comId: String, ancestorId: String, isRoot: Bool) {
+        guard !upvoteLoading else {return}
+        if let post = post {
+            upvoteLoading = true
+            Task {
+                upvotedComms.append(comId)
+                try await commentManager.upvoteComment(commentId: comId)
+                CoreDataManager.shared.addCommentVote(commentId: comId, postId: post.id)
+    //            rootComments[comments.firstIndex(where: {$0.id == comId}) ?? 0].comment.upvotes += 1
+                if isRoot {
+                    if let idx = rootComments.firstIndex(where: {$0.id == comId}) {
+                        rootComments[idx].comment.upvotes += 1
+                        print("gotem")
+                    }
+                } else {
+                    if let idx = rootComments.firstIndex(where: {$0.id == ancestorId}) {
+                        if let secIdx = rootComments[idx].commentThreadState?.children.firstIndex(where: {$0.id == comId}) {
+                            rootComments[idx].commentThreadState?.children[secIdx].comment.upvotes += 1
+                        }
+                    }
+                }
+                CommentsCache.shared.setCache(coms: rootComments, postId: post.id)
+                upvoteLoading = false
+            }
         }
     }
     
-    func removeComUpvote(comId: String) {
-        Task {
-            try await commentManager.removeCommentUpvote(id: comId)
-            CoreDataManager.shared.removeCommentVote(commentId: comId)
-            upvotedComms.removeAll(where: {$0 == comId})
-            comments[comments.firstIndex(where: {$0.id == comId}) ?? 0].comment.upvotes -= 1
+    func removeComUpvote(comId: String, ancestorId: String, isRoot: Bool) {
+        guard !upvoteLoading else {return}
+        if let post = post {
+            upvoteLoading = true
+            Task {
+                upvotedComms.removeAll(where: {$0 == comId})
+                try await commentManager.upvoteComment(commentId: comId)
+                CoreDataManager.shared.addCommentVote(commentId: comId, postId: post.id)
+                if isRoot {
+                    if let idx = rootComments.firstIndex(where: {$0.id == comId}) {
+                        if rootComments[idx].comment.upvotes > 0 {
+                            rootComments[idx].comment.upvotes -= 1
+                        }
+                    }
+                } else {
+                    if let idx = rootComments.firstIndex(where: {$0.id == ancestorId}) {
+                        if let secIdx = rootComments[idx].commentThreadState?.children.firstIndex(where: {$0.id == comId}) {
+                            if rootComments[idx].commentThreadState?.children[secIdx].comment.upvotes ?? 0 > 0 {
+                                rootComments[idx].commentThreadState?.children[secIdx].comment.upvotes -= 1
+                            }
+                        }
+                    }
+                }
+                CommentsCache.shared.setCache(coms: rootComments, postId: post.id)
+                upvoteLoading = false
+            }
         }
     }
     
@@ -179,72 +245,147 @@ final class PostViewModel: ObservableObject {
         upvotedComms = CoreDataManager.shared.getPostCommentVotes(postId: postId).map({$0.commentId ?? ""})
     }
     
-    func fetchComments() async throws {
+    func loadInitialRootComments() async throws {
+        resetRootComments()
+        let hadCache = fetchCachedRoots()
+        if !hadCache {try await fetchRootComments()}
+    }
+        
+    func resetRootComments() {
+        commentsCursor = nil
+        hasMoreComments = true
+        rootCommentIDs = Set()
+        rootComments.removeAll()
+    }
+    
+    func fetchCachedRoots() -> Bool {
         if let post = post {
-            var viewComs: [viewCommentModel] = []
-            var newComments: [CommentModel] = []
-            var shouldCache = false
-            if let cached = CommentsCache.shared.digPostComments(postId: post.id) {
-                print("retrieving cached comments...")
-                newComments = cached
-                let withExComments: [CommentWithExpanded] = newComments.map { cm in
-                    let hasChildren = newComments.contains(where: { $0.parentCommentId == cm.id })
-                    return CommentWithExpanded(comment: cm, isExpanded: hasChildren)
-                }
-                viewComs = mapCachedComments(comments: withExComments)
-                print(newComments.count)
-            } else {
-                print("network fetching comments...")
-                newComments = try await commentManager.getComments(postId: post.id)
-                viewComs = mapComments(comments: newComments)
-                shouldCache = true
+            var comments: [viewCommentModel] = []
+            if let cached = CommentsCache.shared.digRootComments(postId: post.id) {
+                print("getting from cache")
+                comments.append(contentsOf: cached)
+                hasMoreComments = CommentsCache.shared.digHasMore(postId: post.id)
+                commentsCursor = CommentsCache.shared.digCursor(postId: post.id)
+                appendRootComments(comments)
+                return true
             }
-            print("view coms", viewComs)
-            let ordered = orderHierarchically(viewComs)
-            print("ordered count", ordered.count)
-            comments = ordered
-            updateAvatarCache(for: ordered)
-            if shouldCache {
-                print("caching comments...")
-                CommentsCache.shared.replaceCache(coms: newComments, postId: post.id)
+        }
+        return false
+    }
+    
+    func fetchRootComments(limit: Int = 10) async throws {
+        print("fetch root triggered")
+        defer {commentsIsLoading = false}
+        if let post = post {
+            var comments: [viewCommentModel] = []
+            print("hasMoreComments: ", hasMoreComments)
+            if hasMoreComments {
+                commentsIsLoading = true
+                let response = try await commentManager.getRootComments(postId: post.id, limit: limit, cursor: commentsCursor)
+                commentsCursor = response.1
+                let mapped = mapComments(comments: response.0)
+                comments.append(contentsOf: mapped)
+                hasMoreComments = response.1 != nil
             }
+            appendRootComments(comments)
+            CommentsCache.shared.setCache(coms: rootComments, postId: post.id)
+            CommentsCache.shared.setCacheHasMore(postId: post.id, hasMore: hasMoreComments)
+            CommentsCache.shared.setCacheCursor(postId: post.id, cursor: commentsCursor)
+            updateAvatarCache(for: comments)
         }
     }
     
-    func refreshComments() async throws {
+    func fetchChildren(limit: Int = 10, rootComment: viewCommentModel) async throws {
+        // if has more, show button
+        // if has loaded replies just expand = true
+        // if has loaded and expand == true, if has more then fetch more and then store and cache
+        // expanded means has replies loaded and is showing them all
         if let post = post {
-            var newComments: [CommentModel] = []
-            CommentsCache.shared.clearPost(postId: post.id)
-            newComments = try await commentManager.getComments(postId: post.id)
-            let viewComs = mapComments(comments: newComments)
-            let coms = orderHierarchically(viewComs)
-            comments = coms
-            updateAvatarCache(for: coms)
-            CommentsCache.shared.replaceCache(coms: newComments, postId: post.id)
+            if let idx = rootComments.firstIndex(where: {$0.id == rootComment.id}) {
+                var newRoot = rootComment
+                if rootComment.commentThreadState?.isExpanded == false {
+                    newRoot.commentThreadState?.isExpanded = true
+                }
+                if rootComment.commentThreadState?.hasMore == true || (rootComment.comment.hasChildren && rootComment.commentThreadState?.children.isEmpty == true){
+                    let response = try await commentManager.fetchChildren(ancestorId: rootComment.id, limit: limit, cursor: rootComment.commentThreadState?.cursor)
+                    newRoot.commentThreadState?.cursor = response.1
+                    if let threadState = newRoot.commentThreadState {
+                        let seenChildrenIds = Set(threadState.children.map(\.id))
+                        let newComs = mapComments(comments: response.0).filter({!seenChildrenIds.contains($0.id)})
+                        newRoot.commentThreadState?.children.append(contentsOf: newComs)
+                        newRoot.commentThreadState?.hasMore = response.1 != nil
+                        updateAvatarCache(for: newComs)
+                    }
+                }
+                rootComments[idx] = newRoot
+            }
+            CommentsCache.shared.setCache(coms: rootComments, postId: post.id)
+            CommentsCache.shared.setCacheHasMore(postId: post.id, hasMore: hasMoreComments)
         }
     }
+        
+//    func fetchComments() async throws {
+//        if let post = post {
+//            var viewComs: [viewCommentModel] = []
+//            var newComments: [CommentModel] = []
+//            var shouldCache = false
+//            if let cached = CommentsCache.shared.digPostComments(postId: post.id) {
+//                print("retrieving cached comments...")
+//                newComments = cached
+//                let withExComments: [CommentWithExpanded] = newComments.map { cm in
+//                    let hasChildren = newComments.contains(where: { $0.parentCommentId == cm.id })
+//                    return CommentWithExpanded(comment: cm, isExpanded: hasChildren)
+//                }
+//                viewComs = mapCachedComments(comments: withExComments)
+//                print(newComments.count)
+//            } else {
+//                print("network fetching comments...")
+//                newComments = try await commentManager.getComments(postId: post.id)
+//                viewComs = mapComments(comments: newComments)
+//                shouldCache = true
+//            }
+//            print("view coms", viewComs)
+//            let ordered = orderHierarchically(viewComs)
+//            print("ordered count", ordered.count)
+//            comments = ordered
+//            updateAvatarCache(for: ordered)
+//            if shouldCache {
+//                print("caching comments...")
+//                CommentsCache.shared.replaceCache(coms: newComments, postId: post.id)
+//            }
+//        }
+//    }
+    
+//    func refreshComments() async throws {
+//        if let post = post {
+//            var newComments: [CommentModel] = []
+//            CommentsCache.shared.clearPost(postId: post.id)
+//            newComments = try await commentManager.getComments(postId: post.id)
+//            let viewComs = mapComments(comments: newComments)
+//            let coms = orderHierarchically(viewComs)
+//            comments = coms
+//            updateAvatarCache(for: coms)
+//            CommentsCache.shared.replaceCache(coms: newComments, postId: post.id)
+//        }
+//    }
     
     func updateAvatarCache(for coms: [viewCommentModel]) {
         let userIds = Set(coms.map { $0.comment.authorId })
-
-        for userId in userIds {
-            // Skip if already cached
-            guard avatarCacheManager.getAvatar(for: userId) == nil else { continue }
-
-            Task.detached(priority: .background) { [weak self] in
-                guard let self = self else {return}
-                if let latestAvatar = try? await UserManager.shared.fetchUserImageAddress(userId: userId) {
-                    
-                    UserAvatarCache.shared.setAvatar(latestAvatar, for: userId)
-                    
-                    await MainActor.run {
-                        for i in self.comments.indices {
-                            if self.comments[i].comment.authorId == userId {
-                                self.comments[i].comment.authorProfPic = latestAvatar
-                            }
-                        }
+        let uncachedUserIds = userIds.filter({avatarCacheManager.getAvatar(for: $0) == nil})
+        
+        Task {
+            var newAvatars: [String:String] = try await UserManager.shared.fetchAvatars(uniqueIds: uncachedUserIds)
+            for (userId, avatar) in newAvatars {
+                UserAvatarCache.shared.setAvatar(avatar, for: userId)
+                for idx in rootComments.indices {
+                    if rootComments[idx].comment.authorId == userId {
+                        rootComments[idx].comment.authorProfPic = avatar
                     }
                 }
+            }
+            if let post = post {
+                CommentsCache.shared.setCache(coms: rootComments, postId: post.id)
+                print("cache restored")
             }
         }
     }
@@ -269,140 +410,55 @@ final class PostViewModel: ObservableObject {
             if let cachedAddress = avatarCacheManager.getAvatar(for: c.authorId) {
                 c.authorProfPic = cachedAddress
             }
-            finalComs.append(viewCommentModel(comment: c, isExpanded: false, id: c.id, isGrandchild: false, threadId: ""))
+            finalComs.append(viewCommentModel(comment: c, id: c.id, commentThreadState: CommentThreadState(children: [], cursor: nil, hasMore: false, isLoading: false, isExpanded: true)))
         }
         return finalComs
     }
     
-    func mapCachedComments(comments: [CommentWithExpanded]) -> [viewCommentModel] {
-        var finalComs: [viewCommentModel] = []
-        for var c in comments {
-            if let cachedAddress = avatarCacheManager.getAvatar(for: c.comment.authorId) {
-                c.comment.authorProfPic = cachedAddress
-            }
-            finalComs.append(viewCommentModel(comment: c.comment, isExpanded: c.isExpanded, id: c.comment.id, isGrandchild: false, threadId: ""))
+    func mapComment(comment: CommentModel) -> viewCommentModel {
+        var newCom = comment
+        if let cachedAddress = avatarCacheManager.getAvatar(for: comment.authorId) {
+            newCom.authorProfPic = cachedAddress
         }
-        return finalComs
+        return viewCommentModel(comment: newCom, id: newCom.id, commentThreadState: CommentThreadState(children: [], cursor: nil, hasMore: false, isLoading: false, isExpanded: true))
     }
     
-    @MainActor
-    func fetchChildren(viewComment: viewCommentModel, limit: Int = 0) async throws -> [viewCommentModel] {
-        guard limit < 10 else { return [] }
-        guard let post = post else { return [] }
-
-        // Fetch direct children
-        let childComms = try await commentManager.getChildComments(postId: post.id, commentId: viewComment.id)
-        var newChildComs = mapComments(comments: childComms)
-        print("found ", newChildComs.count, " children")
-        for index in newChildComs.indices {
-            if limit > 0 {
-                newChildComs[index].isGrandchild = true
-            }
-        }
-        newChildComs = orderComments(comments: newChildComs)
-
-        var allChildren: [viewCommentModel] = []
-
-        for child in newChildComs {
-            //Recursively fetch deeper children if needed
-            if child.comment.hasChildren {
-                let grandchildren = try await fetchChildren(viewComment: child, limit: limit + 1)
-                allChildren.append(child)
-                allChildren.append(contentsOf: grandchildren)
-            } else {
-                allChildren.append(child)
-            }
-        }
-
-        return allChildren
-    }
-    
-    @MainActor
-    func catchChildren(viewCom: viewCommentModel) async throws {
-        do {
-            let theChildren = try await fetchChildren(viewComment: viewCom)
-            assignChildren(firstCom: viewCom, commentList: theChildren)
-            print(theChildren)
-            CommentsCache.shared.cacheComments(coms: theChildren.map({$0.comment}), postId: viewCom.comment.postId)
-            print("Cache count: ", CommentsCache.shared.digPostComments(postId: viewCom.comment.postId)?.count ?? [])
-            updateAvatarCache(for: comments)
-            print("cached children")
-        } catch {
-            print("Error fetching children: \(error)")
-        }
-    }
-    
-    @MainActor
-    func assignChildren(firstCom: viewCommentModel, commentList: [viewCommentModel]) {
-        guard let parentIndex = comments.firstIndex(where: { $0.id == firstCom.id }) else {
-            comments.append(contentsOf: commentList)
-            return
-        }
-
-        comments.insert(contentsOf: commentList, at: parentIndex + 1)
-        comments[parentIndex].isExpanded = true
-    }
-
-    
-    func getAuthorName(id: String) -> String? {
-        return comments.first(where: {$0.id == id})?.comment.authorName
-    }
-    
-    func collapseComments(viewComment: viewCommentModel) {
-        comments.removeAll(where: {$0.comment.parentCommentId == viewComment.id})
-        if let index = comments.firstIndex(where: {$0.id == viewComment.id}) {
-            comments[index].isExpanded = false
-        }
-    }
-    
-    func uploadComment(message: String, parentId: String?) async throws {
+    func uploadComment(message: String, parentId: String?, parentAuthorId: String?, parentAuthorName: String?, ancestorId: String?) async throws {
         if let post = post {
+            print("uploading from view model")
             do {
-                let newComment = CommentModel(id: UUID().uuidString, postId: post.id, postName: post.name, message: message, authorId: userId, authorName: username, authorProfPic: chosenProfileImageAddress, createdAt: Timestamp(date: Date()), upvotes: 0, parentCommentId: parentId ?? "", hasChildren: false, isOnEvent: false)
-                if parentId != nil {
-                    try await commentManager.updateToParent(commentId: parentId!)
-                }
+                let newId = UUID().uuidString
+                let newComment = CommentModel(id: newId, postId: post.id, postName: post.name, message: message, authorId: userId, authorName: username, authorProfPic: chosenProfileImageAddress, createdAt: Timestamp(date: Date()), upvotes: 0, parentCommentId: parentId ?? "", parentAuthorId: parentAuthorId ?? "", parentAuthorName: parentAuthorName ?? "", ancestorId: ancestorId ?? "", hasChildren: false, isOnEvent: false, isGrand: isGrand(parentId: parentId ?? "", ancestorId: ancestorId ?? ""))
                 try await commentManager.uploadComment(comment: newComment)
-                CommentsCache.shared.cacheComment(com: newComment, postId: post.id)
-                if parentId != nil {
-                    CommentsCache.shared.updateToParent(commentId: parentId ?? "", postId: post.id)
-                }
+                CommentsCache.shared.cacheComment(com: mapComment(comment: newComment), postId: post.id)
                 userManager.addGags(userId: userId, contributionType: .comment)
+                if ancestorId != nil {
+                    print("is reply")
+                    try await commentManager.updateToParent(commentId: ancestorId ?? "")
+                    if let idx = rootComments.firstIndex(where: {$0.id == ancestorId}) {
+                        var ancestor = rootComments[idx]
+                        print("appending to ancestor")
+                        if ancestor.commentThreadState?.children.count == 0 {
+                            if ancestor.comment.hasChildren == true {
+                                ancestor.commentThreadState?.hasMore = true
+                            }
+                        }
+                        ancestor.commentThreadState?.children.append(mapComment(comment: newComment))
+                        ancestor.comment.hasChildren = true
+                        rootComments[idx] = ancestor
+                    }
+                }
+                else {
+                    appendRootComment(mapComment(comment: newComment))
+                }
+                CommentsCache.shared.setCache(coms: rootComments, postId: post.id)
+                CommentsCache.shared.setCacheHasMore(postId: post.id, hasMore: hasMoreComments)
             } catch {
                 print(error)
             }
         }
     }
-    
-    func hasParent(id: String) -> Bool {
-        if comments.first(where: {$0.id == id})?.comment.parentCommentId != "" {
-            return true
-        }
-        return false
-    }
-    
-//    func getIndentLayer(com: CommentModel) -> Int {
-//        guard com.parentCommentId != "" else {
-//            return 0
-//        }
-//        
-//        var layer = 1
-//        var id = com.parentCommentId
-//        while true {
-//            if let parent = comments.first(where: {$0.comment.id == id}) {
-//                if parent.comment.parentCommentId == nil {
-//                    return layer
-//                }
-//                else {
-//                    layer += 1
-//                    id = parent.comment.parentCommentId!
-//                }
-//            }
-//            else {
-//                return layer
-//            }
-//        }
-//    }
+
     
     func timeAgoString(from timestamp: Timestamp) -> String {
         let date = timestamp.dateValue()
@@ -436,104 +492,30 @@ final class PostViewModel: ObservableObject {
         let nowSeconds = now.timeIntervalSince1970
 
         return comments.sorted { (a: viewCommentModel, b: viewCommentModel) -> Bool in
-//            // Convert timestamps to seconds since 1970
-//            let createdASeconds = a.uiComment.comment.createdAt.dateValue().timeIntervalSince1970
-//            let createdBSeconds = b.uiComment.comment.createdAt.dateValue().timeIntervalSince1970
-//
-//            // Compute ages in hours
-//            let ageA = (nowSeconds - createdASeconds) / 3600.0
-//            let ageB = (nowSeconds - createdBSeconds) / 3600.0
-//
-//            // Each factor explicitly typed as Double
-//            let upvoteA = Double(a.uiComment.comment.upvotes) * 1.0
-//            let upvoteB = Double(b.uiComment.comment.upvotes) * 1.0
-//
-//            let childrenA = Double(a.numChildren) * 0.75
-//            let childrenB = Double(b.numChildren) * 0.75
-//
-//            let recencyA = -ageA * 0.5
-//            let recencyB = -ageB * 0.5
-//
-//            let weightA = upvoteA + childrenA + recencyA
-//            let weightB = upvoteB + childrenB + recencyB
-//
-//            return weightA > weightB
             return a.comment.createdAt.dateValue().timeIntervalSince1970 < b.comment.createdAt.dateValue().timeIntervalSince1970
         }
     }
     
-    func orderHierarchically(_ models: [viewCommentModel]) -> [viewCommentModel] {
+    func isGrand(parentId: String, ancestorId: String) -> Bool {
+         
+        guard !(ancestorId.isEmpty) else {return false}
 
-        var byId: [String: viewCommentModel] = [:]
-        var children: [String: [viewCommentModel]] = [:]
-        var roots: [viewCommentModel] = []
-
-        // Build ID map WITHOUT nuking hasChildren
-        for model in models {
-            byId[model.comment.id] = model
-        }
-
-        // Assign children & roots
-        for model in models {
-            let parentId = model.comment.parentCommentId
-
-            if parentId.isEmpty || byId[parentId] == nil {
-                // Parent not loaded → treat as root
-                roots.append(model)
-            } else {
-                children[parentId, default: []].append(model)
+        if !(parentId.isEmpty) {
+            if let index = rootComments.firstIndex(where: {$0.id == ancestorId}) {
+                if rootComments[index]
+                    .commentThreadState?
+                    .children
+                    .contains(where: { $0.id == parentId }) == true {
+                    return true
+                }
             }
         }
 
-        // Mark parents as having children (only ever set true)
-        for parentId in children.keys {
-            if var parent = byId[parentId] {
-                parent.comment.hasChildren = true
-                byId[parentId] = parent
-            }
-        }
-
-        // Sort chronologically
-        roots.sort { $0.comment.createdAt.dateValue() < $1.comment.createdAt.dateValue() }
-        for key in children.keys {
-            children[key]?.sort {
-                $0.comment.createdAt.dateValue() < $1.comment.createdAt.dateValue()
-            }
-        }
-
-        var ordered: [viewCommentModel] = []
-
-        func dfs(_ node: viewCommentModel, depth: Int) {
-            var current = node
-            current.isGrandchild = depth >= 2
-            current.threadId = findGrandparent(comment: current)
-            ordered.append(current)
-
-            for child in children[node.comment.id] ?? [] {
-                dfs(child, depth: depth + 1)
-            }
-        }
-
-        for root in roots {
-            dfs(root, depth: 0)
-        }
-
-        return ordered
-    }
-    
-    func findGrandparent(comment: viewCommentModel) -> String {
-        var current = comment
-
-        while !current.comment.parentCommentId.isEmpty,
-              let parent = getCommentFromId(id: current.comment.parentCommentId) {
-            current = parent
-        }
-
-        return current.id
+        return false
     }
     
     func getCommentFromId(id: String) -> viewCommentModel? {
-        return comments.first(where: {$0.id == id}) ?? nil
+        return rootComments.first(where: {$0.id == id}) ?? nil
     }
 
 }

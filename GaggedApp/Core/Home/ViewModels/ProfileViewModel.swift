@@ -10,6 +10,9 @@ import SwiftUI
 import FirebaseFirestore
 import Combine
 
+// Cursor aliases for other sections to mirror UserPostsCursor
+// Assumes managers expose the same cursor shape
+
 struct ProfPicParams {
     let offsetX: CGFloat
     let offsetY: CGFloat
@@ -21,6 +24,7 @@ final class ProfileViewModel: ObservableObject {
     
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
+    @AppStorage("isAdmin") var isAdmin = false
     
     @Published var hasLoadedPosts = false
     @Published var hasLoadedComments = false
@@ -37,7 +41,21 @@ final class ProfileViewModel: ObservableObject {
     @Published var savedPolls: [PollWithOptions] = []
     @Published var searchText: String = ""
     @Published var searchResults: [MixedType] = []
-    @Published var loadedUser: UserModel = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), keywords: [])
+    @Published var loadedUser: UserModel = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), isAdmin: false, numPosts: 0, keywords: [])
+    @Published var hasMoreUserPosts: Bool = true
+    @Published var hasMoreUserComments: Bool = true
+    @Published var hasMoreUserPolls: Bool = true
+    @Published var hasMoreUpvotedPosts: Bool = true
+    
+    private var userPostsCursor: ProperPostsCursor? = nil
+    private var userCommentsCursor: CommentsCursor? = nil
+    private var userPollsCursor: PollCursor? = nil
+    private var upvotedPostsCursor: Date? = nil
+    
+    private var upvotedDebounceTask: Task<Void, Never>? = nil
+    private var postsDebounceTask: Task<Void, Never>? = nil
+    private var commentsDebounceTask: Task<Void, Never>? = nil
+    private var pollsDebounceTask: Task<Void, Never>? = nil
     
     let postManager = FirebasePostManager.shared
     let commentsManager = CommentsManager.shared
@@ -103,8 +121,13 @@ final class ProfileViewModel: ObservableObject {
     
     func loadMoreUserInfo() async throws {
         Task {
-            let user = try await userManager.fetchUser(userId: userId)
+            var user = try await userManager.fetchUser(userId: userId)
+            if user.numPosts < 0 {
+                try await userManager.addPostToUser(userId: userId)
+                user.numPosts = 0
+            }
             loadedUser = user
+            isAdmin = loadedUser.isAdmin
             print("IMAGE URL", user.imageAddress)
         }
     }
@@ -114,6 +137,7 @@ final class ProfileViewModel: ObservableObject {
         Task {
             let user = try await userManager.fetchUser(userId: userId)
             loadedUser = user
+            isAdmin = loadedUser.isAdmin
             print("IMAGE URL", user.imageAddress)
         }
     }
@@ -142,40 +166,181 @@ final class ProfileViewModel: ObservableObject {
 //        searchResults = mixAndOrder(postList: searchedPosts, eventList: searchedEvents)
 //    }
     
-    func getUserPostsIfNeeded() async throws {
-        guard !hasLoadedPosts else {return}
-        let posts = try await postManager.getUserPosts(uid: userId)
-        userPosts = posts
-        hasLoadedPosts = true
+    func loadInitialUserPosts() async {
+        hasLoadedPosts = false
+        resetUserPosts()
+        await getUserPosts()
     }
     
-    func getMoreUserPosts() async throws {
-        let posts = try await postManager.getUserPosts(uid: userId)
-        userPosts = posts
+    func resetUserPosts() {
+        userPosts.removeAll()
+        userPostsCursor = nil
+        hasMoreUserPosts = true
+        hasLoadedPosts = false
     }
     
-    func getCommentsIfNeeded() async throws {
-        guard !hasLoadedComments else {return}
-        let comments = try await commentsManager.getUserComments(userId: userId)
-        userComments = comments
-        hasLoadedComments = true
+    func getUserPosts() async {
+        print("in, ", hasMoreUserPosts)
+        guard !userId.isEmpty, hasMoreUserPosts else { return }
+
+        hasLoadedPosts = false
+
+        do {
+            let (posts, nextCursor) = try await postManager.getUserPosts(uid: userId, cursor: userPostsCursor)
+
+            // Cancel any pending UI update
+            postsDebounceTask?.cancel()
+
+            postsDebounceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.userPosts.append(contentsOf: posts)
+                }
+
+                self.userPostsCursor = nextCursor
+                self.hasMoreUserPosts = nextCursor != nil
+                self.hasLoadedPosts = true
+            }
+
+        } catch {
+            print("feed error", error)
+            hasLoadedPosts = true
+        }
     }
     
-    func getMoreUserComments() async throws {
-        let comments = try await commentsManager.getUserComments(userId: userId)
-        userComments = comments
+    // MARK: - Comments (pagination)
+    func loadInitialUserComments() async {
+        hasLoadedComments
+        resetUserComments()
+        await getUserComments()
+    }
+
+    func resetUserComments() {
+        userComments.removeAll()
+        userCommentsCursor = nil
+        hasMoreUserComments = true
+        hasLoadedComments = false
+    }
+
+    func getUserComments() async {
+        print("comments in, ", hasMoreUserComments)
+        guard !userId.isEmpty, hasMoreUserComments else { return }
+
+        hasLoadedComments = false
+
+        do {
+            let (comments, nextCursor) = try await commentsManager.getUserComments(userId: userId, cursor: userCommentsCursor)
+
+            // Cancel any pending UI update
+            commentsDebounceTask?.cancel()
+
+            commentsDebounceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.userComments.append(contentsOf: comments)
+                }
+
+                self.userCommentsCursor = nextCursor
+                self.hasMoreUserComments = nextCursor != nil
+                self.hasLoadedComments = true
+            }
+
+        } catch {
+            print("comments error", error)
+            hasLoadedComments = true
+        }
     }
     
-    func getUserPollsIfNeeded() async throws {
-        guard !hasLoadedPolls else {return}
-        let polls = try await pollManager.getUserPolls(uid: userId)
-        userPolls = polls
-        hasLoadedPolls = true
+    // MARK: - Polls (pagination)
+    func loadInitialUserPolls() async {
+        hasLoadedPolls = false
+        resetUserPolls()
+        await getUserPolls()
+    }
+
+    func resetUserPolls() {
+        userPolls.removeAll()
+        userPollsCursor = nil
+        hasMoreUserPolls = true
+        hasLoadedPolls = false
+    }
+
+    func getUserPolls() async {
+        print("polls in, ", hasMoreUserPolls)
+        guard !userId.isEmpty, hasMoreUserPolls else { return }
+
+        hasLoadedPolls = false
+
+        do {
+            let (polls, nextCursor) = try await pollManager.getUserPolls(uid: userId, cursor: userPollsCursor)
+
+            // Cancel any pending UI update
+            pollsDebounceTask?.cancel()
+
+            pollsDebounceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.userPolls.append(contentsOf: polls)
+                }
+
+                self.userPollsCursor = nextCursor
+                self.hasMoreUserPolls = nextCursor != nil
+                self.hasLoadedPolls = true
+            }
+
+        } catch {
+            print("polls error", error)
+            hasLoadedPolls = true
+        }
     }
     
-    func getMoreUserPolls() async throws {
-        let polls = try await pollManager.getUserPolls(uid: userId)
-        userPolls = polls
+    // MARK: - Upvoted (pagination)
+    func loadInitialUpvotedPosts() async {
+        hasLoadedUpvoted = false
+        resetUpvotedPosts()
+        await getUpvotedPosts()
+    }
+
+    func resetUpvotedPosts() {
+        upvotedPosts.removeAll()
+        upvotedPostsCursor = nil
+        hasMoreUpvotedPosts = true
+        hasLoadedUpvoted = false
+    }
+
+    func getUpvotedPosts() async {
+        guard !userId.isEmpty, hasMoreUpvotedPosts else { return }
+
+        hasLoadedUpvoted = false
+
+        do {
+            let (posts, nextCursor) =
+                try await postManager.getUpvotedPostsFromCoreData(
+                    cursor: upvotedPostsCursor
+                )
+
+            // Cancel any pending UI update
+            upvotedDebounceTask?.cancel()
+
+            upvotedDebounceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.upvotedPosts.append(contentsOf: posts)
+                }
+
+                self.upvotedPostsCursor = nextCursor
+                self.hasMoreUpvotedPosts = nextCursor != nil
+                self.hasLoadedUpvoted = true
+            }
+
+        } catch {
+            print("upvoted error", error)
+            hasLoadedUpvoted = true
+        }
     }
     
     func savedLoadOptions(for pollId: String) async throws {
@@ -189,7 +354,7 @@ final class ProfileViewModel: ObservableObject {
             options = try await pollManager.fetchPollOptions(pollId: pollId)
             PollCache.shared.cacheOptions(pollId: pollId, options: options)
         }
-        if let idx = savedPolls.firstIndex(where: {$0.poll.id == pollId}) {
+        if let idx = savedPolls.firstIndex(where: {$0.id == pollId}) {
             var newPoll = savedPolls[idx]
             newPoll.options = options
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -198,6 +363,7 @@ final class ProfileViewModel: ObservableObject {
         }
     }
     
+    @MainActor
     func loadOptions(for pollId: String) async throws {
         var options: [PollOption] = []
         if let cachedOptions = PollCache.shared.digPollOptions(pollId: pollId) {
@@ -209,8 +375,10 @@ final class ProfileViewModel: ObservableObject {
             options = try await pollManager.fetchPollOptions(pollId: pollId)
             PollCache.shared.cacheOptions(pollId: pollId, options: options)
         }
-        if let idx = userPolls.firstIndex(where: {$0.poll.id == pollId}) {
+        if let idx = userPolls.firstIndex(where: {$0.id == pollId}) {
+            print("found index")
             var newPoll = userPolls[idx]
+            print("options: \(options)")
             newPoll.options = options
             withAnimation(.easeInOut(duration: 0.3)) {
                 userPolls[idx] = newPoll
@@ -219,7 +387,7 @@ final class ProfileViewModel: ObservableObject {
     }
     
     func clearOptions(for pollId: String) {
-        if let idx = userPolls.firstIndex(where: {$0.poll.id == pollId}) {
+        if let idx = userPolls.firstIndex(where: {$0.id == pollId}) {
             var newPoll = userPolls[idx]
             newPoll.options = []
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -228,7 +396,7 @@ final class ProfileViewModel: ObservableObject {
         }
     }
     func savedClearOptions(for pollId: String) {
-        if let idx = savedPolls.firstIndex(where: {$0.poll.id == pollId}) {
+        if let idx = savedPolls.firstIndex(where: {$0.id == pollId}) {
             var newPoll = savedPolls[idx]
             newPoll.options = []
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -237,20 +405,50 @@ final class ProfileViewModel: ObservableObject {
         }
     }
     
-    func getMoreUpvotedPosts() {
-        Task {
-            let posts = try await postManager.getUpvotedPostFromCoreData()
-            upvotedPosts = posts
-            hasLoadedUpvoted = true
+    func refreshFeedPoll(pollId: String, optionToAdd: String, optionToSubtract: String) {
+        if let index = userPolls.firstIndex(where: {$0.id == pollId}) {
+            var poll = userPolls[index]
+            if optionToAdd != "" {
+                if let optionIdx = poll.options.firstIndex(where: {$0.id == optionToAdd}) {
+                    print("Changed option", optionIdx)
+                    poll.options[optionIdx].voteCount += 1
+                    poll.poll.totalVotes += 1
+                }
+            }
+            if optionToSubtract != "" {
+                if let optionIdx = poll.options.firstIndex(where: {$0.id == optionToSubtract}) {
+                    poll.options[optionIdx].voteCount -= 1
+                    poll.poll.totalVotes -= 1
+                }
+            }
+            PollCache.shared.cacheOptions(pollId: poll.id, options: poll.options)
+            userPolls[index] = poll
+            if let idx = userPolls.firstIndex(where: {$0.id == pollId}) {
+                userPolls[idx] = poll
+            }
         }
     }
     
-    func getUpvotedPostsIfNeeded() {
-        if !hasLoadedUpvoted {
-            Task {
-                let posts = try await postManager.getUpvotedPostFromCoreData()
-                upvotedPosts = posts
-                hasLoadedUpvoted = true
+    func refreshSavedFeedPoll(pollId: String, optionToAdd: String, optionToSubtract: String) {
+        if let index = savedPolls.firstIndex(where: {$0.id == pollId}) {
+            var poll = savedPolls[index]
+            if optionToAdd != "" {
+                if let optionIdx = poll.options.firstIndex(where: {$0.id == optionToAdd}) {
+                    print("Changed option", optionIdx)
+                    poll.options[optionIdx].voteCount += 1
+                    poll.poll.totalVotes += 1
+                }
+            }
+            if optionToSubtract != "" {
+                if let optionIdx = poll.options.firstIndex(where: {$0.id == optionToSubtract}) {
+                    poll.options[optionIdx].voteCount -= 1
+                    poll.poll.totalVotes -= 1
+                }
+            }
+            PollCache.shared.cacheOptions(pollId: poll.id, options: poll.options)
+            savedPolls[index] = poll
+            if let idx = savedPolls.firstIndex(where: {$0.id == pollId}) {
+                savedPolls[idx] = poll
             }
         }
     }
@@ -287,7 +485,9 @@ final class ProfileViewModel: ObservableObject {
     
     @MainActor
     func refreshSaved() async throws {
+        hasLoadedSaved = false
         try await getSavedPosts()
+        PollCache.shared.clearCache()
         try await getSavedPolls()
         hasLoadedSaved = true
     }
@@ -308,6 +508,8 @@ final class ProfileViewModel: ObservableObject {
         savedPolls = []
         searchText = ""
         searchResults = []
-        loadedUser = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), keywords: [])
+        PollCache.shared.clearCache()
+        loadedUser = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), isAdmin: false, numPosts: 0, keywords: [])
     }
 }
+

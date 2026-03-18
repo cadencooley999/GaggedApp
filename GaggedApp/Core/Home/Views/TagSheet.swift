@@ -41,7 +41,7 @@ struct TagSheet: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(Color.theme.darkBlue)
                 .padding(12)
-                .glassEffect(.regular.tint(Color.theme.lightBlue.opacity(0.2)), in: .rect(cornerRadius: 16))
+                .glassEffect(.regular.tint(Color.theme.lightBlue.opacity(0.2)), in: .rect(cornerRadius: 25))
                 .onTapGesture {
                     showTagSheet = false
                 }
@@ -74,9 +74,9 @@ struct TagSheet: View {
                 }
                 .padding(12)
                 .background(
-//                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-//                        .fill(Color.theme.darkBlue.opacity(0.06))
-                    Color.white.cornerRadius(16)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.ultraThinMaterial)
+//                    Color.theme.background.cornerRadius(16)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -106,7 +106,7 @@ struct TagPill: View {
             .fixedSize(horizontal: true, vertical: false)
             .background(background)
             .overlay(overlay)
-            .foregroundStyle(isSelected ? Color.theme.white : .primary)
+            .foregroundStyle(isSelected ? Color.theme.background : Color.theme.accent)
             .clipShape(Capsule())
             .animation(.snappy(duration: 0.2), value: isSelected)
     }

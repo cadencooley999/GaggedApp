@@ -15,6 +15,7 @@ final class LoginViewModel: ObservableObject {
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress = ""
+    @AppStorage("isAdmin") var isAdmin: Bool = false
     
     let userManager = UserManager.shared
     
@@ -26,6 +27,7 @@ final class LoginViewModel: ObservableObject {
             userId = user.id
             username = user.username
             chosenProfileImageAddress = user.imageAddress
+            isAdmin = user.isAdmin
             CoreDataManager.setup(userId: userId)
             return true
         } catch {

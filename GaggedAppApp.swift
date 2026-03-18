@@ -8,26 +8,61 @@
 import SwiftUI
 import Foundation
 import UIKit
+import Firebase
 import FirebaseCore
+import FirebaseMessaging
+import UserNotifications
 
 class AppDelegate: NSObject, UIApplicationDelegate {
-  func application(_ application: UIApplication,
-                   didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-      
-      if !ProcessInfo.processInfo.environment.keys.contains("XCODE_RUNNING_FOR_PREVIEWS") {
-          FirebaseApp.configure()
-      }
 
-    return true
-  }
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        
+        print("Did finish launching")
+
+        // Initialize Firebase
+        FirebaseApp.configure()
+
+        // Set delegates
+        UNUserNotificationCenter.current().delegate = NotificationManager.shared
+        Messaging.messaging().delegate = NotificationManager.shared
+        
+        UserListenerManager.shared.startListening()
+        
+        print("📡 Firebase APNs token:", Messaging.messaging().apnsToken as Any)
+
+        return true
+    }
+
+    // MARK: - APNs registration
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        print("✅ APNs token received")
+        // Pass device token to FCM
+        Messaging.messaging().apnsToken = deviceToken
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        print("Failed to register for remote notifications:", error)
+    }
 }
 
 @main
 struct GaggedAppApp: App {
     
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    
     @AppStorage("hasOnboarded") var hasOnboarded = false
     @AppStorage("isLoggedIn") var isLoggedIn = false
     @AppStorage("userId") var userId = ""
+    @AppStorage("isBanned") var isBanned = false
     @StateObject var homeViewModel: HomeViewModel
     @StateObject var addPostViewModel = AddPostViewModel()
     @StateObject var profileViewModel = ProfileViewModel()
@@ -39,7 +74,8 @@ struct GaggedAppApp: App {
     @StateObject var onBoardingViewModel = OnboardingViewModel()
     @StateObject var settingsViewModel = SettingsViewModel()
     @StateObject var loginViewModel = LoginViewModel()
-    @StateObject var locationManager = LocationManager()
+    @StateObject var inspectionViewModel = InspectionViewModel()
+    @StateObject var locationManager = LocationManager.shared
     @StateObject var pollsViewModel: PollsViewModel
     @StateObject var feedStore = FeedStore()
     @StateObject private var windowSize = WindowSize()
@@ -51,12 +87,10 @@ struct GaggedAppApp: App {
         _homeViewModel = StateObject(
             wrappedValue: HomeViewModel(feedStore: feedStore)
         )
-
-        _searchViewModel = StateObject(
-            wrappedValue: SearchViewModel(feedStore: feedStore)
-        )
         
         _pollsViewModel = StateObject(wrappedValue: PollsViewModel(feedStore: feedStore))
+        
+        _searchViewModel = StateObject(wrappedValue: SearchViewModel())
         
         if userId != "" {
             CoreDataManager.setup(userId: userId)
@@ -72,13 +106,11 @@ struct GaggedAppApp: App {
             TagManager.shared.categories = newCategories
         }
     }
-    
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    
+
     var body: some Scene {
         WindowGroup {
             if hasOnboarded {
-                if isLoggedIn && userId != "" {
+                if isLoggedIn && userId != "" && !isBanned {
                     GeometryReader { geo in
                         TabHomeView()
                             .onAppear {
@@ -98,9 +130,13 @@ struct GaggedAppApp: App {
                             .environmentObject(settingsViewModel)
                             .environmentObject(locationManager)
                             .environmentObject(pollsViewModel)
+                            .environmentObject(inspectionViewModel)
                             .environmentObject(feedStore)
                     }
                     .environmentObject(windowSize)
+                }
+                else if isBanned {
+                    BannedView()
                 }
                 else {
                     GeometryReader { geo in

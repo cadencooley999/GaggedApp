@@ -41,37 +41,44 @@ struct HomeView: View {
 //                .frame(width: 300)
 //                .frame(height: 300)
             VStack(spacing: 0) {
-                ScrollView(showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            postSection
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 8)
-                                .transition(.opacity)
-                        }
-                        .padding(.top, 55 + safeArea().top)
-                        .padding(.bottom, 64)
-                }
-                .refreshable {
-                    Task {
-                        print(locationManager.citiesInRange)
-                        try await homeViewModel.fetchMorePosts(cities: locationManager.citiesInRange)
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        Rectangle()
+                            .fill(Color.clear)
+                            .frame(height: 0.1)
+                            .id("top")
+                            VStack(spacing: 0) {
+                                postSection
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 8)
+                                    .transition(.opacity)
+                                if homeViewModel.feedStore.loadedPosts.count == 0 && homeViewModel.hasLoaded{
+                                    Text("No posts available for this location")
+                                        .font(.caption)
+                                        .foregroundStyle(Color.theme.trashcanGray)
+                                        .padding(.top, 160)
+                                }
+                                if homeViewModel.isLoading {
+                                    ProgressView()
+                                        .padding(.top, homeViewModel.feedStore.loadedPosts.count == 0 ? 128 : 64)
+                                }
+                            }
+                            .padding(.top, 55 + safeArea().top)
+                            .padding(.bottom, homeViewModel.hasMore ? 1000 : 104)
                     }
+                    .onChange(of: homeViewModel.feedStore.loadedPosts.count) {
+                        if homeViewModel.feedStore.loadedPosts.count == 0 {
+                            proxy.scrollTo("top")
+                        }
+                    }
+                    .refreshable {
+                        print("refreshing")
+                        Task {
+                            await homeViewModel.loadInitialPostFeed(cityIds: locationManager.citiesInRange)
+                        }
+                    }
+                    .ignoresSafeArea()
                 }
-//                .onScrollPhaseChange({ oldPhase, newPhase, context in
-//                    let newOffset = context.geometry.contentOffset
-//                    if newOffset.y < scrollOffset.y {
-//                        withAnimation(.easeInOut(duration: 0.2)) {
-//                            hideTabBar = false
-//                        }
-//                    }
-//                    else if newOffset.y > scrollOffset.y && !(newOffset.y <= 10) {
-//                        withAnimation(.easeInOut(duration: 0.2)) {
-//                            hideTabBar = true
-//                        }
-//                    }
-//                    scrollOffset = newOffset
-//                })
-                .ignoresSafeArea()
             }
 //            VStack(spacing: 0) {
 //                VStack(spacing: 0){
@@ -82,12 +89,6 @@ struct HomeView: View {
 //                .background(.thinMaterial)
 //                Spacer()
 //            }
-            if homeViewModel.isLoading {
-                ZStack {
-                    Color.clear.ignoresSafeArea()
-                    ProgressView()
-                }
-            }
         }
 //        .gesture(
 //            DragGesture()
@@ -104,10 +105,14 @@ struct HomeView: View {
 //        )
         .task {
             Task {
-                print(homeViewModel.hasLoaded)
-                print("HOME TASK RUN")
-                try await locationManager.requestLocationIfNeeded(execute: !homeViewModel.hasLoaded)
-                try await homeViewModel.fetchPostsIfNeeded(cities: locationManager.citiesInRange)
+                guard homeViewModel.hasLoaded == false else { return }
+                let cities = try await locationManager.requestLocationIfNeeded(execute: !homeViewModel.hasLoaded)
+                if cities.isEmpty {
+                    await homeViewModel.loadInitialPostFeed(cityIds: locationManager.citiesInRange)
+                }
+                else {
+                    await homeViewModel.loadInitialPostFeed(cityIds: cities)
+                }
                 homeViewModel.hasLoaded = true
             }
         }
@@ -119,25 +124,37 @@ struct HomeView: View {
                 VStack {
                     if homeViewModel.postMatrix.indices.contains(x) {
                         if !homeViewModel.postMatrix[x].isEmpty {
-                            ForEach(homeViewModel.postMatrix[x], id: \.self) { post in
-                                MiniPostView(post: post, width: nil, stroked: nil)
-                                    .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
-                                    .contentShape(Rectangle())
-                                    .shadow(color: .black.opacity(0.10), radius: 8, y: 6)
-                                    .transition(.opacity)
-                                    .onTapGesture {
-                                        print("Little Post Tapped")
-                                        selectedPost = post
-                                        postViewModel.setPost(postSelection: post)
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            showPostView = true
+                            LazyVStack {
+                                ForEach(homeViewModel.postMatrix[x], id: \.self) { post in
+                                    MiniPostView(post: post, width: nil, stroked: nil)
+//                                        .opacity(selectedPost?.id == post.id && showPostView ? 0 : 1)
+                                        .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
+                                        .contentShape(Rectangle())
+                                        .shadow(color: .black.opacity(0.10), radius: 8, y: 6)
+                                        .transition(.opacity)
+                                        .onTapGesture {
+                                            print("Little Post Tapped")
+                                            selectedPost = post
+                                            postViewModel.setPost(postSelection: post)
+                                            withAnimation(.easeInOut(duration: 0.2)) {
+                                                showPostView = true
+                                            }
+                                            Task {
+                                                postViewModel.commentsIsLoading = true
+                                                print("home com fetch")
+                                                try await postViewModel.loadInitialRootComments()
+                                                postViewModel.commentsIsLoading = false
+                                            }
                                         }
-                                        Task {
-                                            postViewModel.commentsIsLoading = true
-                                            try await postViewModel.fetchComments()
-                                            postViewModel.commentsIsLoading = false
+                                        .onAppear {
+                                            guard post.id == homeViewModel.feedStore.loadedPosts.last?.id else {return}
+                                            Task {
+                                                print("last post seen", post.id)
+                                                await homeViewModel.loadMorePostFeed(cityIds: locationManager.citiesInRange)
+                                            }
                                         }
-                                    }
+                                        .transition(.opacity)
+                                }
                             }
                             Spacer()
                         }
@@ -149,5 +166,4 @@ struct HomeView: View {
     
 
 }
-
 

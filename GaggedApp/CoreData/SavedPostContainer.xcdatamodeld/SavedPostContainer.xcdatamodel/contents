@@ -15,5 +15,6 @@
     <entity name="VotedPost" representedClassName="VotedPost" syncable="YES" codeGenerationType="class">
         <attribute name="id" optional="YES" attributeType="String"/>
         <attribute name="isUpvoted" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="votedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
     </entity>
 </model>

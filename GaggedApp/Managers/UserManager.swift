@@ -33,6 +33,8 @@ class UserManager {
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress = ""
+    @AppStorage("isAdmin") var isAdmin = false
+    @AppStorage("isBanned") var isBanned = false
     
     let specificDate = Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 1, hour: 0, minute: 0))! // Example for a specific date
     
@@ -65,13 +67,61 @@ class UserManager {
             "imageAddress" : imageAddress,
             "garma" : 0,
             "username" : usernm,
-            "createdAt": Timestamp(date: Date())
+            "createdAt": Timestamp(date: Date()),
+            "numPosts" : 0,
+            "notificationsEnabled" : false,
+            "isAdmin" : false,
+            "strikes" : 0,
         ]
         try await usersCollection.document(user.uid).setData(userData, merge: false)
         userEmail = user.email
         userId = user.uid
         username = usernm
         chosenProfileImageAddress = imageAddress
+    }
+    
+    func addStrikeAndCheckBan(userId: String) async throws {
+        let userRef = usersCollection.document(userId)
+
+        do {
+            try await Firestore.firestore().runTransaction { transaction, errorPointer in
+                
+                let snapshot: DocumentSnapshot
+                do {
+                    snapshot = try transaction.getDocument(userRef)
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+                print("snapshot exists:", snapshot.exists)
+                print("here1")
+                let data = snapshot.data() ?? [:]
+                let strikes = data["strikes"] as? Int ?? 0
+                let newStrikes = strikes + 1
+                
+                var updates: [String: Any] = [
+                    "strikes": newStrikes
+                ]
+                print("here2")
+
+                if newStrikes >= 3 {
+                    let twoWeeksFromNow = Calendar.current.date(byAdding: .weekOfYear, value: 2, to: Date())!
+                    updates["banExpires"] = Timestamp(date: twoWeeksFromNow)
+                }
+                print("here3")
+                transaction.updateData(updates, forDocument: userRef)
+                print("here4")
+                return nil
+            }
+        }
+        catch {
+            print(error)
+        }
+    }
+    
+    
+    func addPostToUser(userId: String) async throws {
+        try await usersCollection.document(userId).updateData(["numPosts": FieldValue.increment(Int64(1))])
     }
     
     func logInUser(email: String, password: String) async throws -> AuthDataResultModel {
@@ -88,6 +138,8 @@ class UserManager {
                 self.userId = ""
                 self.username = ""
                 self.chosenProfileImageAddress = ""
+                self.isAdmin = false
+                self.isBanned = false
             }
             print("User signed out successfully")
         } catch let signOutError as NSError {
@@ -137,6 +189,29 @@ class UserManager {
             print(error)
             return ""
         }
+    }
+    
+    func fetchAvatars(uniqueIds: Set<String>) async throws -> [String: String] {
+        guard !uniqueIds.isEmpty else { return [:] }
+
+        var avatarDict: [String: String] = [:]
+
+        // Firestore 'in' queries allow up to 10 values
+        let chunks = uniqueIds.chunked(into: 10)
+
+        for chunk in chunks {
+            let snapshot = try await usersCollection
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+
+            for document in snapshot.documents {
+                let id = document.documentID
+                let address = document["imageAddress"] as? String ?? ""
+                avatarDict[id] = address
+            }
+        }
+
+        return avatarDict
     }
 
     func lastChange() async throws -> Date? {
@@ -257,10 +332,12 @@ class UserManager {
         let garma = doc["garma"] as? Int ?? 0
         let createdAt = doc["createdAt"] as? Timestamp ?? Timestamp(date: Date())
         let keywords = doc["keywords"] as? [String] ?? []
+        let numPosts = doc["numPosts"] as? Int ?? 0
+        let isAdmin = doc["isAdmin"] as? Bool ?? false
         
         print("mapping doc", id)
         
-        return UserModel(id: id, username: username, garma: garma, imageAddress: imageAddress, createdAt: createdAt, keywords: keywords)
+        return UserModel(id: id, username: username, garma: garma, imageAddress: imageAddress, createdAt: createdAt, isAdmin: isAdmin, numPosts: numPosts, keywords: keywords)
     }
     
     func addGags(userId: String, contributionType: ContributionType) {

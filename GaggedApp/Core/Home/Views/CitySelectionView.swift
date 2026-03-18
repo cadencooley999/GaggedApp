@@ -35,7 +35,7 @@ struct CitySelectionView: View {
         .onAppear {
             recentIDs = decodeList(from: lastCityIds)
             recentCities = cityManager.getCities(ids: recentIDs)
-            homeViewModel.addSubscribers(recentCities)
+            homeViewModel.bindCitySearch(recentCities: recentCities)
             print(lastCityIds)
         }
     }
@@ -59,7 +59,7 @@ struct CitySelectionView: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(Color.theme.darkBlue)
                 .padding()
-                .glassEffect(.regular.tint(Color.theme.lightBlue.opacity(0.2)), in: .rect(cornerRadius: 30))
+                .glassEffect(.regular.tint(Color.theme.lightBlue.opacity(0.2)), in: .rect(cornerRadius: 16))
                 .onTapGesture {
                     showCitySelectionView = false
                 }

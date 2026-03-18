@@ -18,6 +18,7 @@ struct OneSearch: View {
     @EnvironmentObject var searchViewModel: SearchViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var profileViewModel: ProfileViewModel
     @EnvironmentObject var windowSize: WindowSize
 //    @EnvironmentObject var eventViewModel: EventViewModel
     
@@ -28,6 +29,9 @@ struct OneSearch: View {
     @Binding var selectedPost: PostModel?
     @Binding var searchViewFocused: Bool
     @Binding var showSearchBar: Bool
+    @Binding var showPollView: Bool
+    @Binding var showReportView: Bool
+    @Binding var preReportInfo: preReportModel?
     @FocusState var isFocused: Bool
     
     @State var showxmark: Bool = false
@@ -43,24 +47,11 @@ struct OneSearch: View {
         ZStack {
             Background()
                 .frame(maxWidth: windowSize.size.width, maxHeight: windowSize.size.height)
-            if searchViewModel.isLoading {
-                CircularLoadingView(color: Color.theme.darkBlue)
-                    .frame(width: 30, height: 30)
+            
+            VStack {
+                contentFeed(currentFilter: searchViewModel.selectedFilter)
             }
-            ScrollView {
-                VStack {
-                    contentFeed(currentFilter: searchViewModel.selectedFilter)
-                }
-                .padding(.top, 160)
-                .padding(.bottom, 100)
-            }
-            .onScrollPhaseChange({ oldPhase, newPhase in
-                if newPhase == .interacting {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isFocused = false
-                    }
-                }
-            })
+            
             if isSearchTab {
                 VStack {
                     header
@@ -77,19 +68,21 @@ struct OneSearch: View {
             }
             VStack {
                 segmentedController
-                    .padding(.top, 215)
+                    .padding(.top, searchViewModel.columns > 2 ? 232 : 215)
                     .frame(height: 55)
                 Spacer()
             }
         }
         .task {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: {
-                searchViewModel.addSubscribers {
-                    locationManager.citiesInRange
-                }
+                searchViewModel.addSubscribers()
             })
+//            if !searchViewModel.hasLoadedPosts {
+//                Task {
+//                    try await searchViewModel.loadInitialGlobalPosts()
+//                }
+//            }
         }
-        .animation(.easeInOut(duration: 0.3), value: isSearchTab)
     }
     
     var header: some View {
@@ -158,15 +151,15 @@ struct OneSearch: View {
                     guard selected != filter else { return }
 
                     withAnimation(.easeInOut(duration: 0.25)) {
-                        searchViewModel.isLoading = true
                         searchViewModel.selectedFilter = filter
                     }
                 }
             }
         }
-        .padding(2)
+        .padding(searchViewModel.columns > 2 ? 6 : 2)
         .glassEffect()
         .padding(.horizontal)
+        .animation(.easeInOut(duration: 0.3), value: isSearchTab)
     }
 
 
@@ -188,12 +181,12 @@ struct OneSearch: View {
             Text(title)
                 .font(.subheadline.bold())
                 .foregroundColor(Color.theme.darkBlue)
-                .padding(.vertical, 6)
+                .padding(.vertical, searchViewModel.columns > 2 ? 10 : 6)
                 .padding(.horizontal)
         }
         .contentShape(Capsule())
         .onTapGesture(perform: action)
-        .frame(width: 100)
+        .frame(width: searchViewModel.columns > 2 ? 110 : 100)
     }
 
 
@@ -226,85 +219,112 @@ struct OneSearch: View {
 //    }
     
     @ViewBuilder func contentFeed(currentFilter: SearchFilter) -> some View {
-        ZStack {
-            if currentFilter == .posts {
+        if currentFilter == .posts {
+            ScrollView(showsIndicators: false) {
                 postFeed
-                    .background(            ZStack {
-                        Color(uiColor: .systemBackground)
-
-                        Image("noise")
-                            .resizable()
-                            .scaledToFill()
-                            .blendMode(.overlay)
+                    .padding(.top, 172)
+                    .padding(.bottom, 100)
+                    .customRefreshable {
+                        try? await searchViewModel.handlePostsRefresh()
                     }
-                    .ignoresSafeArea()
-                    .overlay(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.06),
-                                .clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    ))
             }
-            else {
+            .background(Color.theme.background.ignoresSafeArea())
+//            .background(
+//                ZStack {
+//                    Color(uiColor: .systemBackground)
+//
+//                    Image("noise")
+//                        .resizable()
+//                        .scaledToFill()
+//                        .blendMode(.overlay)
+//                }
+////                .frame(width: windowSize.size.width, height: windowSize.size.height)
+//                .overlay(
+//                    LinearGradient(
+//                        colors: [
+//                            Color.theme.background.opacity(0.06),
+//                            .clear
+//                        ],
+//                        startPoint: .top,
+//                        endPoint: .bottom
+//                    )
+//                )
+//            )
+            .coordinateSpace(name: "scroll")
+            .onScrollPhaseChange({ oldPhase, newPhase in
+                if newPhase == .interacting {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isFocused = false
+                    }
+                }
+            })
+        }
+        else {
+            ScrollView(showsIndicators: false) {
                 pollFeed
-                    .background(            ZStack {
-                        Color(uiColor: .systemBackground)
-
-                        Image("noise")
-                            .resizable()
-                            .scaledToFill()
-                            .blendMode(.overlay)
+                    .padding(.top, 172)
+                    .padding(.bottom, 100)
+                    .customRefreshable {
+                        try? await searchViewModel.handlePollsRefresh()
                     }
-                    .ignoresSafeArea()
-                    .overlay(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.06),
-                                .clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    ))
             }
+            .background(Color.theme.background.ignoresSafeArea())
+            .coordinateSpace(name: "scroll")
+            .onScrollPhaseChange({ oldPhase, newPhase in
+                if newPhase == .interacting {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isFocused = false
+                    }
+                }
+            })
         }
     }
     
     var postFeed: some View {
         ZStack {
-            HStack {
-                ForEach(0..<searchViewModel.columns) { x in
-                    VStack {
-                        if searchViewModel.postMatrix.indices.contains(x) {
-                            if !searchViewModel.postMatrix[x].isEmpty {
-                                ForEach(searchViewModel.postMatrix[x], id: \.self) { post in
-                                    MiniPostView(post: post, width: nil, stroked: nil)
-                                        .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
-                                        .contentShape(Rectangle())
-                                        .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
-                                        .transition(.opacity)
-                                        .onTapGesture {
-                                            print("Little Post Tapped")
-                                            selectedPost = post
-                                            postViewModel.setPost(postSelection: post)
-                                            withAnimation(.easeInOut(duration: 0.2)) {
-                                                showPostView = true
+            LazyVStack {
+                HStack(alignment: .top){
+                    ForEach(0..<searchViewModel.columns) { x in
+                        LazyVStack {
+                            if searchViewModel.globalPostMatrix.indices.contains(x) {
+                                if !searchViewModel.globalPostMatrix[x].isEmpty {
+                                    ForEach(searchViewModel.globalPostMatrix[x], id: \.id) { post in
+                                        MiniPostView(post: post, width: nil, stroked: nil)
+                                            .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
+                                            .contentShape(Rectangle())
+                                            .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
+                                            .transition(.opacity)
+                                            .onTapGesture {
+                                                print("Little Post Tapped")
+                                                selectedPost = post
+                                                postViewModel.setPost(postSelection: post)
+                                                withAnimation(.easeInOut(duration: 0.2)) {
+                                                    showPostView = true
+                                                }
+                                                Task {
+                                                    postViewModel.commentsIsLoading = true
+                                                    try await postViewModel.loadInitialRootComments()
+                                                    postViewModel.commentsIsLoading = false
+                                                }
                                             }
-                                            Task {
-                                                postViewModel.commentsIsLoading = true
-                                                try await postViewModel.fetchComments()
-                                                postViewModel.commentsIsLoading = false
+                                            .onAppear {
+                                                if post.id == searchViewModel.loadedPosts.last?.id {
+                                                    if searchViewModel.searchText.isEmpty {
+                                                        Task {
+                                                            try await searchViewModel.loadGlobalPosts()
+                                                        }
+                                                    }
+                                                }
                                             }
-                                        }
+                                    }
                                 }
-                                Spacer()
                             }
                         }
                     }
+                }
+                if searchViewModel.postsIsLoading {
+                    ProgressView()
+                        .padding(.top, 128)
                 }
             }
 
@@ -314,13 +334,32 @@ struct OneSearch: View {
     
     var pollFeed: some View {
         ZStack {
-            VStack {
-                ForEach(searchViewModel.pollList, id: \.poll.id) { poll in
-                    PollCard(poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView)
-                        .contentShape(Rectangle())
-                        .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
-                        .padding(.bottom)
-                        
+            LazyVStack {
+                ForEach(searchViewModel.globalPollList, id: \.compositeID) { poll in
+                    MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, screenType: .searchFeed)
+                            .padding(8)
+                            .onTapGesture {
+                                if poll.options.count > 0 {
+                                    searchViewModel.clearOptions(for: poll.id)
+                                } else {
+                                    Task {
+                                        try await searchViewModel.loadOptions(for: poll.id)
+                                    }
+                                }
+                            }
+                            .onAppear {
+                                if poll.id == searchViewModel.loadedPolls.last?.id {
+                                    if searchViewModel.searchText.isEmpty {
+                                        Task {
+                                            try await searchViewModel.loadGlobalPolls()
+                                        }
+                                    }
+                                }
+                            }
+                }
+                if searchViewModel.pollsIsLoading {
+                    ProgressView()
+                        .padding(.top, 128)
                 }
             }
         }

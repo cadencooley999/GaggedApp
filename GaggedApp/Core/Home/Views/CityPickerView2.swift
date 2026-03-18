@@ -12,11 +12,14 @@ struct CityPickerView2: View {
     @AppStorage("lastCityIds") var lastCityIds = "[]"
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var homeViewModel: HomeViewModel
+    @EnvironmentObject var pollsViewModel: PollsViewModel
+    @EnvironmentObject var leaderViewModel: LeaderViewModel
     @EnvironmentObject var windowSize: WindowSize
     
     let dissmissable: Bool
     
     @Binding var showCityPickerView: Bool
+    @Binding var selectedTab: TabBarItem
 
     @FocusState var isFocused: Bool
     @State var showxmark: Bool = false
@@ -72,7 +75,7 @@ struct CityPickerView2: View {
         .onAppear {
             recentIDs = decodeList(from: lastCityIds)
             recentCities = cityManager.getCities(ids: recentIDs)
-            homeViewModel.addSubscribers(recentCities)
+            homeViewModel.bindCitySearch(recentCities: recentCities)
             print(lastCityIds)
         }
         .onChange(of: isFocused) {
@@ -163,22 +166,34 @@ struct CityPickerView2: View {
                     }
                     .padding(.horizontal)
                     .frame(height: 55)
-                    .background(
-                        Rectangle()
-                            .fill(Color.clear)
-                            .onTapGesture {
-                                if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
-                                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                                        UIApplication.shared.open(url)
-                                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
+                            // Mark that we're heading to Settings so we don't update on return
+                            locationManager.clearLocationData()
+                            locationManager.returningFromSettings = true
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        } else {
+                            Task {
+                                // Request current location; this will prompt if needed and then deliver updates
+                                let cities = try await locationManager.requestLocation()
+                                if cities.isEmpty {
+                                    // Fallback to manager's citiesInRange if continuation returned empty
+                                    try await resetNecessary(citiesInRange: locationManager.citiesInRange)
                                 } else {
-                                    Task { try await locationManager.requestLocation() }
+                                    try await resetNecessary(citiesInRange: cities)
                                 }
                             }
-                    )
+                        }
+                    }
+                    
                 }
             }
-            .glassEffect(in: .rect(cornerRadius: 30))
+            .background {
+                Rectangle().fill(.thinMaterial).cornerRadius(30)
+            }
             .padding(.horizontal)
 
             // Select New City
@@ -210,7 +225,9 @@ struct CityPickerView2: View {
                     if city.id != homeViewModel.allCitiesList.last?.id { Divider().padding(.leading, 16) }
                 }
             }
-            .glassEffect(in: .rect(cornerRadius: 30))
+            .background {
+                Rectangle().fill(.thinMaterial).cornerRadius(30)
+            }
             .padding(.horizontal)
         }
     }
@@ -219,11 +236,9 @@ struct CityPickerView2: View {
         // set user location to city chosen
         Task {
             homeViewModel.isLoading = true
-            showCityPickerView = false
             print("setting range")
             let citiesInRange = locationManager.setLocation(city)
-            try await homeViewModel.fetchMorePosts(cities: citiesInRange)
-            homeViewModel.isLoading = false
+            try await resetNecessary(citiesInRange: citiesInRange)
         }
         // don't let it get reset
     }
@@ -297,6 +312,23 @@ struct CityPickerView2: View {
     func decodeList(from json: String) -> [String] {
         let data = Data(json.utf8)
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+    
+    func resetNecessary(citiesInRange: [String]) async throws {
+        pollsViewModel.reset()
+        homeViewModel.reset()
+        leaderViewModel.reset()
+        switch selectedTab.title {
+        case "Home":
+            await homeViewModel.loadInitialPostFeed(cityIds: citiesInRange)
+        case "Polls":
+            try await pollsViewModel.getInitialPolls(cityIds: citiesInRange)
+        case "LeaderBoard":
+            try await leaderViewModel.fetchMoreLeaderboards(cities: citiesInRange)
+        default:
+            break
+            //
+        }
     }
 }
 

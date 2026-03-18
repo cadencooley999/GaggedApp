@@ -28,7 +28,7 @@ struct PostLinker: View {
         ZStack {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
-            if searchViewModel.isLoading {
+            if searchViewModel.postsIsLoading {
                 CircularLoadingView(color: Color.theme.darkBlue)
                     .frame(width: 30, height: 30)
             }
@@ -51,9 +51,7 @@ struct PostLinker: View {
         .task {
             print("postlinkertask")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: {
-                searchViewModel.addSubscribers {
-                    locationManager.citiesInRange
-                }
+                searchViewModel.addSubscribers()
                 isFocused = true
             })
         }
@@ -66,7 +64,7 @@ struct PostLinker: View {
             Text("Attach")
         }
         .font(.subheadline.bold())
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.theme.background)
         .padding(12)
         .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 16))
         .glassEffectTransition(.materialize)
@@ -119,9 +117,9 @@ struct PostLinker: View {
             HStack {
                 ForEach(0..<searchViewModel.columns) { x in
                     VStack {
-                        if searchViewModel.postMatrix.indices.contains(x) {
-                            if !searchViewModel.postMatrix[x].isEmpty {
-                                ForEach(searchViewModel.postMatrix[x], id: \.self) { post in
+                        if searchViewModel.globalPostMatrix.indices.contains(x) {
+                            if !searchViewModel.globalPostMatrix[x].isEmpty {
+                                ForEach(searchViewModel.globalPostMatrix[x], id: \.self) { post in
                                     MiniPostView(post: post, width: nil, stroked: post.id == postToLink?.id)
                                         .id("\(post.id)-\(post.upvotes)-\(post.downvotes)")
                                         .contentShape(Rectangle())

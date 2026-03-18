@@ -8,7 +8,6 @@ import FirebaseFirestore
 
 struct CommentModel: Identifiable {
     let id: String
-    // Post or Event id
     let postId: String
     let postName: String
     let message: String
@@ -18,19 +17,24 @@ struct CommentModel: Identifiable {
     let createdAt: Timestamp
     var upvotes: Int
     let parentCommentId: String
+    let parentAuthorId: String
+    let parentAuthorName: String
+    let ancestorId: String
     var hasChildren: Bool
     let isOnEvent: Bool
-}   
+    let isGrand: Bool
+}
 
 struct viewCommentModel: Identifiable {
     var comment: CommentModel
-    var isExpanded: Bool
     let id: String
-    var isGrandchild: Bool
-    var threadId: String
+    var commentThreadState: CommentThreadState?
 }
 
-struct CommentWithExpanded {
-    var comment: CommentModel
-    var isExpanded: Bool
+struct CommentThreadState {
+    var children: [viewCommentModel] = []
+    var cursor: CommentsCursor? = nil
+    var hasMore: Bool = true
+    var isLoading: Bool = false
+    var isExpanded: Bool = false
 }

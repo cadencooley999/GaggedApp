@@ -28,18 +28,24 @@ struct LeaderView: View {
                 .frame(maxWidth: windowSize.size.width, maxHeight: windowSize.size.height)
             ScrollView(showsIndicators: false){
                 VStack (spacing: 24){
-                    if leaderViewModel.thisWeekUp.count > 0 {
+                    if !leaderViewModel.thisWeekUp.isEmpty {
                         TopUpThisWeek
                     }
-                    if leaderViewModel.allTimeUp.count > 0 {
+                    if !leaderViewModel.allTimeUp.isEmpty {
                         TopUpAllTime
                     }
-                    if leaderViewModel.allTimeDown.count > 0 {
+                    if !leaderViewModel.allTimeDown.isEmpty {
                         MostDownAllTime
+                    }
+                    if leaderViewModel.thisWeekUp.isEmpty && leaderViewModel.allTimeUp.isEmpty && leaderViewModel.allTimeDown.isEmpty && leaderViewModel.hasLoaded {
+                        Text("No leaderboards available for this location.")
+                            .font(.caption)
+                            .foregroundStyle(Color.theme.trashcanGray)
+                            .padding(.top, 152)
                     }
                     if leaderViewModel.isLoading {
                         ProgressView()
-                            .padding(.top, 50)
+                            .padding(.top, 128)
                     }
                 }
                 .padding(.top, 84)
@@ -62,7 +68,10 @@ struct LeaderView: View {
 //        )
         .task {
             Task {
-                try await leaderViewModel.fetchLeaderboardsIfNeeded(cities: locationManager.citiesInRange)
+                if !leaderViewModel.hasLoaded {
+                    try await leaderViewModel.fetchLeaderboardsIfNeeded(cities: locationManager.citiesInRange)
+                }
+                leaderViewModel.hasLoaded = true 
             }
         }
     }
@@ -96,7 +105,7 @@ struct LeaderView: View {
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.fetchComments()
+                                        try await postViewModel.loadInitialRootComments()
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }
@@ -106,7 +115,7 @@ struct LeaderView: View {
                                     Text("+ \(leaderViewModel.weekStats[idx])")
                                     Image(systemName: "arrow.up")
                                         .fontWeight(.bold)
-                                        .foregroundStyle(Color.green)
+                                        .foregroundStyle(Color.theme.darkBlue)
                                 }
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -149,7 +158,7 @@ struct LeaderView: View {
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.fetchComments()
+                                        try await postViewModel.loadInitialRootComments()
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }
@@ -191,7 +200,7 @@ struct LeaderView: View {
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.fetchComments()
+                                        try await postViewModel.loadInitialRootComments()
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }

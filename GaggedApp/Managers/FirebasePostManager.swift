@@ -8,12 +8,35 @@
 import Foundation
 import SwiftUI
 import FirebaseFirestore
+import FirebaseFunctions
+
+struct FeedCursor: Codable, Equatable {
+    let createdAtSeconds: TimeInterval   // unix seconds or ms (match server)
+    let postId: String
+}
+
+struct FeedResponse: Codable {
+    let posts: [PostModel]
+    let nextCursor: FeedCursor?
+}
+
+struct ProperPostsCursor {
+    let createdAt: Timestamp
+    let postId: String
+}
+
+struct UpvotedPostsCursor {
+    let createdAtSeconds: TimeInterval
+    let postId: String
+}
 
 enum PostManagerError: Error { case invalidId, invalidCityIds, documentNotFound }
 
 class FirebasePostManager {
     
     static let shared = FirebasePostManager()
+    
+    let functions = Functions.functions()
     
     private var postsCollection: CollectionReference {
         Firestore.firestore().collection("Posts")
@@ -23,6 +46,8 @@ class FirebasePostManager {
         
         let postRef = postsCollection.document()
         let postId = postRef.documentID
+        
+        let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
         
         try await postRef.setData([
             "id": postId,
@@ -35,9 +60,19 @@ class FirebasePostManager {
             "createdAt" : post.createdAt,
             "cityIds" : post.cityIds,
             "tags" : post.tags,
-            "keywords" : generateKeywords(authorName: post.authorName, subjectName: post.name, captionPrefix: post.text, tags: post.tags),
+            "keywords" : generateKeywords(authorName: post.authorName, subjectName: post.name, captionPrefix: post.text, tags: post.tags, cities: CityManager.shared.getCities(ids: post.cityIds).map({$0.city})),
             "upvotes" : post.upvotes,
-            "downvotes" : post.downvotes
+            "downvotes" : post.downvotes,
+            "notifiedThresholds": [
+                "10" : false,
+                "50" : false,
+                "100" : false
+            ],
+            "titlePrefixes" : generatePrefixes(from: post.name),
+            "isHidden" : false,
+            "reportCount" : 0,
+            "reportReasons" : [],
+            "expiresAt" : Timestamp(date: threeMonthsFromNow)
         ])
     }
     
@@ -47,6 +82,78 @@ class FirebasePostManager {
         let snap = try await ref.getDocument()
         guard snap.exists else { return }
         try await ref.delete()
+    }
+    
+    func fetchHomeFeed(
+        cityIds: [String],
+        pageSize: Int = 10,
+        cursor: FeedCursor?
+    ) async throws -> FeedResponse {
+        
+        let newCityIds = cityIds.prefix(50)
+
+        var payload: [String: Any] = [
+            "cityIds": newCityIds.compactMap({$0}),
+            "pageSize": pageSize
+        ]
+
+        if let cursor {
+            payload["cursor"] = [
+                "createdAtSeconds": Double(cursor.createdAtSeconds), // MUST be Double
+                "postId": String(cursor.postId)
+            ]
+        }
+        
+        print("Sending cursor:", payload["cursor"] ?? "nil")
+        
+        let result = try await functions
+            .httpsCallable("getHomeFeed")
+            .call(payload)
+        
+        guard let dict = result.data as? [String: Any] else {
+            return FeedResponse(posts: [], nextCursor: nil)
+        }
+
+        let posts = decodePosts(from: dict)
+        let cursor = dict["nextCursor"] as? [String: Any]
+        let nextCursor = decodeCursor(from: dict)
+        
+        return FeedResponse(
+            posts: posts,
+            nextCursor: nextCursor
+        )
+    }
+    
+    func fetchGlobalFeed(pageSize: Int = 10, cursor: ProperPostsCursor?) async throws -> ([PostModel], ProperPostsCursor?) {        
+        var query: Query = postsCollection.order(by: "createdAt").order(by: "id").whereField("isHidden", isEqualTo: false).limit(to: pageSize + 1)
+        
+        if let cursor {
+            query = query.start(after: [
+                cursor.createdAt,
+                cursor.postId
+            ])
+        }
+        
+        let snapshot = try await query.getDocuments()
+        let docs = snapshot.documents
+        
+        print("docs", docs.map({$0.documentID}))
+
+        let hasMore = docs.count > pageSize
+        let pageDocs = Array(docs.prefix(pageSize))
+
+        let posts = pageDocs.map { mapItem(item: $0) }
+
+        let nextCursor: ProperPostsCursor? = {
+            guard hasMore, let last = pageDocs.last else { return nil }
+            guard let createdAt = last["createdAt"] as? Timestamp else {return nil}
+            return ProperPostsCursor(
+                createdAt: createdAt,
+                postId: last.documentID
+            )
+        }()
+        
+        return (posts, nextCursor)
     }
     
     func getPosts(from cityIDs: [String]) async throws -> [PostModel] {
@@ -61,6 +168,7 @@ class FirebasePostManager {
         for batch in batches {
             let query = postsCollection
                 .whereField("cityIds", arrayContainsAny: batch)
+                .whereField("isHidden", isEqualTo: false)
                 .limit(to: 20)
             
             let snapshot = try await query.getDocuments()
@@ -85,30 +193,56 @@ class FirebasePostManager {
         return mapItem(item: doc)
     }
     
-    
-    func getUserPosts(uid: String) async throws -> [PostModel] {
-        guard !uid.isEmpty else { return [] }
-        
-        var posts: [PostModel] = []
-        
-        let query: Query = postsCollection.whereField("authorId", isEqualTo: uid).order(by: "createdAt", descending: true).limit(to: 20)
-        let newDocs = try await query.getDocuments()
-        
-        for i in newDocs.documents {
-            var post = mapItem(item: i)
-            posts.append(post)
+    func getUserPosts(
+        uid: String,
+        pageSize: Int = 15,
+        cursor: ProperPostsCursor?
+    ) async throws -> ([PostModel], ProperPostsCursor?) {
+
+        guard !uid.isEmpty else { return ([], nil) }
+
+        var query = postsCollection
+            .whereField("authorId", isEqualTo: uid)
+            .whereField("isHidden", isEqualTo: false)
+            .order(by: "createdAt", descending: true)
+            .order(by: FieldPath.documentID())
+            .limit(to: pageSize + 1)
+
+        if let cursor {
+            query = query.start(after: [
+                cursor.createdAt,
+                cursor.postId
+            ])
         }
-        
-        return posts
-        
+
+        let snapshot = try await query.getDocuments()
+        let docs = snapshot.documents
+
+        let hasMore = docs.count > pageSize
+        let pageDocs = Array(docs.prefix(pageSize))
+
+        let posts = pageDocs.map { mapItem(item: $0) }
+
+        let nextCursor: ProperPostsCursor? = {
+            guard hasMore, let last = pageDocs.last else { return nil }
+            guard let createdAt = last["createdAt"] as? Timestamp else { return nil }
+            return ProperPostsCursor(
+                createdAt: createdAt,
+                postId: last.documentID
+            )
+        }()
+
+        return (posts, nextCursor)
     }
+    
     
     func upvotePost(postId: String) async throws {
         guard !postId.isEmpty else { throw PostManagerError.invalidId }
         let ref = postsCollection.document(postId)
         let snap = try await ref.getDocument()
         guard snap.exists else { throw PostManagerError.documentNotFound }
-        try await ref.updateData(["upvotes": FieldValue.increment(Int64(1))])
+        let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
+        try await ref.updateData(["upvotes": FieldValue.increment(Int64(1)), "expiresAt":threeMonthsFromNow])
     }
     
     func removeUpvote(postId: String) async throws {
@@ -116,7 +250,8 @@ class FirebasePostManager {
         let ref = postsCollection.document(postId)
         let snap = try await ref.getDocument()
         guard snap.exists else { throw PostManagerError.documentNotFound }
-        try await ref.updateData(["upvotes": FieldValue.increment(Int64(-1))])
+        let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
+        try await ref.updateData(["upvotes": FieldValue.increment(Int64(-1)), "expiresAt":threeMonthsFromNow])
     }
     
     func downvotePost(postId: String) async throws {
@@ -124,7 +259,8 @@ class FirebasePostManager {
         let ref = postsCollection.document(postId)
         let snap = try await ref.getDocument()
         guard snap.exists else { throw PostManagerError.documentNotFound }
-        try await ref.updateData(["downvotes": FieldValue.increment(Int64(1))])
+        let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
+        try await ref.updateData(["downvotes": FieldValue.increment(Int64(1)), "expiresAt":threeMonthsFromNow])
     }
     
     func removeDownvote(postId: String) async throws {
@@ -132,7 +268,8 @@ class FirebasePostManager {
         let ref = postsCollection.document(postId)
         let snap = try await ref.getDocument()
         guard snap.exists else { throw PostManagerError.documentNotFound }
-        try await ref.updateData(["downvotes": FieldValue.increment(Int64(-1))])
+        let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
+        try await ref.updateData(["downvotes": FieldValue.increment(Int64(-1)), "expiresAt":threeMonthsFromNow])
     }
     
     func getAllPostsNearby(cities: [String]) async throws -> [PostModel] {
@@ -144,6 +281,7 @@ class FirebasePostManager {
 
         for chunk in chunks {
             let query = postsCollection
+                .whereField("isHidden", isEqualTo: false)
                 .whereField("cityIds", arrayContainsAny: chunk)
 
             let snapshot = try await query.getDocuments()
@@ -184,16 +322,52 @@ class FirebasePostManager {
         }
     }
     
+    func getGlobalPostsFromSearch(keyword: String) async throws -> [PostModel] {
+        let tokens = keyword
+            .lowercased()
+            .split(separator: " ")
+            .map { String($0) }
+        
+        print(tokens)
+
+        guard let first = tokens.first else {
+            return []
+        }
+
+        let snapshot = try await postsCollection
+            .whereField("keywords", arrayContains: first)
+            .whereField("isHidden", isEqualTo: false)
+            .limit(to: 50)
+            .getDocuments()
+
+        let posts = snapshot.documents.compactMap {mapItem(item: $0)}
+
+        let filtered = posts.filter { post in
+            let tokenSet = Set(post.keywords)
+            return tokens.allSatisfy { tokenSet.contains($0) }
+        }
+        
+        return filtered
+    }
+    
     func getPostsFromIds(ids: [String]) async throws -> [PostModel] {
         guard !ids.isEmpty else { return [] }
+
+        let pagedIds = Array(ids.prefix(100))
+        
+        let chunks = pagedIds.chunked(into: 10)
         var posts: [PostModel] = []
-        for id in ids {
-            guard !id.isEmpty else { continue }
-            let doc = try await postsCollection.document(id).getDocument()
-            guard doc.exists else { continue }
-            let newitem = mapItem(item: doc)
-            posts.append(newitem)
+
+        for chunk in chunks {
+            let snapshot = try await postsCollection
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments()
+
+            for doc in snapshot.documents {
+                posts.append(mapItem(item: doc))
+            }
         }
+
         return posts
     }
 
@@ -211,6 +385,7 @@ class FirebasePostManager {
                     let snap = try await Firestore.firestore()
                         .collection("WeeklyPostStats")
                         .whereField("week", isEqualTo: week)
+                        .whereField("isHidden", isEqualTo: false)
                         .whereField("cityIds", arrayContainsAny: chunk)
                         .order(by: "upvotes", descending: true)
                         .limit(to: 5)
@@ -260,6 +435,7 @@ class FirebasePostManager {
                 group.addTask {
                     let snap = try await Firestore.firestore().collection("Posts")
                         .whereField("cityIds", arrayContainsAny: chunk)
+                        .whereField("isHidden", isEqualTo: false)
                         .order(by: "upvotes", descending: true)
                         .limit(to: 20)
                         .getDocuments()
@@ -302,6 +478,7 @@ class FirebasePostManager {
                 group.addTask {
                     let snap = try await Firestore.firestore().collection("Posts")
                         .whereField("cityIds", arrayContainsAny: chunk)
+                        .whereField("isHidden", isEqualTo: false)
                         .order(by: "downvotes", descending: true)
                         .limit(to: 20)
                         .getDocuments()
@@ -332,15 +509,92 @@ class FirebasePostManager {
     }
 
     
-    func getUpvotedPostFromCoreData() async throws -> [PostModel] {
-        let votedposts = CoreDataManager.shared.getUpvotedPosts()
+    func getUpvotedPostsFromCoreData(cursor: Date?) async throws -> ([PostModel], Date?) {
+        let votedposts = CoreDataManager.shared.fetchUpvotedPostIds(pageSize: 10, cursor: cursor)
         print("Voted posts: ", votedposts)
-        let posts = try await getPostsFromIds(ids: votedposts.compactMap({$0.id}))
-        return posts
+        let nextCursor = votedposts.1
+        let posts = try await getPostsFromIds(ids: votedposts.0)
+        return (posts, nextCursor)
+    }
+    
+    func incrementReports(postId: String) async throws {
+        try await postsCollection.document(postId).updateData(["reportCount": FieldValue.increment(Int64(1))])
+    }
+    
+    func updateExpiry(postId: String) async throws {
+        let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
+        try await postsCollection.document(postId).updateData(["expiresAt": Timestamp(date: threeMonthsFromNow)])
     }
         
+    private func mapItem(
+        id: String,
+        data: [String: Any]
+    ) -> PostModel {
 
-    private func mapItem(item: DocumentSnapshot) -> PostModel {
+        let text = data["text"] as? String ?? "Untitled"
+        let name = data["name"] as? String ?? "Anonymous"
+        let imageUrl = data["imageUrl"] as? String ?? ""
+
+        let createdAt: Timestamp
+        if let ts = data["createdAt"] as? Timestamp {
+            createdAt = ts
+        }
+        else if let seconds = data["createdAt"] as? TimeInterval {
+            createdAt = Timestamp(seconds: Int64(seconds), nanoseconds: 0)
+        }
+        else if let dict = data["createdAt"] as? [String: Any],
+                let seconds = dict["_seconds"] as? Int64 {
+            createdAt = Timestamp(seconds: seconds, nanoseconds: 0)
+        }
+        else {
+            createdAt = Timestamp(date: Date())
+        }
+
+        let authorId = data["authorId"] as? String ?? ""
+        let authorName = data["authorName"] as? String ?? ""
+        let authorPicUrl = data["authorPicUrl"] as? String ?? ""
+
+        let keywords = data["keywords"] as? [String] ?? []
+        let tags = data["tags"] as? [String] ?? []
+        let cityIds = data["cityIds"] as? [String] ?? []
+
+        let upvotes = data["upvotes"] as? Int ?? 0
+        let downvotes = data["downvotes"] as? Int ?? 0
+
+        return PostModel(
+            id: id,
+            text: text,
+            name: name,
+            imageUrl: imageUrl,
+            createdAt: createdAt,
+            authorId: authorId,
+            authorName: authorName,
+            authorPicUrl: authorPicUrl,
+            height: 260,
+            cityIds: cityIds,
+            tags: tags,
+            keywords: keywords,
+            upvotes: upvotes,
+            downvotes: downvotes
+        )
+    }
+    
+    func decodePosts(from result: Any) -> [PostModel] {
+        guard
+            let dict = result as? [String: Any],
+            let rawPosts = dict["posts"] as? [[String: Any]]
+        else {
+            return []
+        }
+
+        return rawPosts.compactMap { postDict in
+            guard let id = postDict["id"] as? String else { return nil }
+            return mapItem(id: id, data: postDict)
+        }
+    }
+
+
+    func mapItem(item: DocumentSnapshot) -> PostModel {
         let id = item["id"] as? String ?? ""
         let text = item["text"] as? String ?? "Untitled"
         let name = item["name"] as? String ?? "Anonymous"
@@ -358,10 +612,12 @@ class FirebasePostManager {
         return PostModel(id: id, text: text , name: name, imageUrl: imageUrl, createdAt: createdAt, authorId: authorId, authorName: authorName, authorPicUrl: authorPicUrl, height: 260, cityIds: cityIds, tags: tags, keywords: keywords, upvotes: upvotes, downvotes: downvotes)
     }
     
-    func generateKeywords(authorName: String, subjectName: String, captionPrefix: String, tags: [String]) -> [String] {
-        var inputs = [authorName, subjectName, String(captionPrefix.prefix(5))]
+    func generateKeywords(authorName: String, subjectName: String, captionPrefix: String, tags: [String], cities: [String]) -> [String] {
+        var inputs = [authorName, subjectName, String(captionPrefix.prefix(10))]
         
         inputs.append(contentsOf: tags)
+        
+        inputs.append(contentsOf: cities)
         
         var keywords: [String] = []
         
@@ -381,6 +637,36 @@ class FirebasePostManager {
         return keywords
     }
     
+    func decodeCursor(from result: Any) -> FeedCursor? {
+        guard
+            let dict = result as? [String: Any],
+            let rawCursor = dict["nextCursor"]
+        else {
+            return nil
+        }
+
+        // End of pagination (expected)
+        if rawCursor is NSNull {
+            return nil
+        }
+
+        guard
+            let cursor = rawCursor as? [String: Any],
+            let postId = cursor["postId"] as? String,
+            let createdAtSeconds = cursor["createdAtSeconds"] as? TimeInterval
+        else {
+            print("Cursor malformed:", rawCursor)
+            return nil
+        }
+
+        return FeedCursor(
+            createdAtSeconds: createdAtSeconds,
+            postId: postId
+        )
+    }
+
+
+
     let mockPosts: [PostModel] = [
         PostModel(
             id: "1245",
@@ -428,13 +714,22 @@ class FirebasePostManager {
         let calendar = Calendar(identifier: .iso8601)
         return calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date))!
     }
-}
+    
+    func generatePrefixes(
+        from text: String,
+        minLength: Int = 3,
+        maxLength: Int = 15
+    ) -> [String] {
+        let normalized = text.normalizedForIndexing()
+        let chars = Array(normalized)
 
-extension Array {
-    func chunked(into size: Int) -> [[Element]] {
-        stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
+        guard chars.count >= minLength else { return [] }
+
+        return (minLength...min(chars.count, maxLength)).map {
+            String(chars.prefix($0))
         }
     }
 }
+
+
 

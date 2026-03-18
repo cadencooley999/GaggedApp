@@ -14,12 +14,20 @@ class PollsViewModel: ObservableObject {
     
     private let feedStore: FeedStore
     var cancellables: Set<AnyCancellable> = []
-    
+    private var ingestedPollIDs = Set<String>()
+
     @Published var polls: [PollWithOptions] = []
     @Published var hasLoaded: Bool = false
     @Published var isLoading: Bool = false
+    @Published var poll: PollWithOptions? = nil
+    @Published var hasMore: Bool = true
+    
+    @Published var columns: [GridItem] = [GridItem()]
     
     let pollManager = PollManager.shared
+    
+    private var cursor: PollFeedCursor? = nil
+    
     
     init(feedStore: FeedStore) {
         self.feedStore = feedStore
@@ -29,35 +37,58 @@ class PollsViewModel: ObservableObject {
     private func bindFeedStore() {
         feedStore.$loadedPolls
             .sink { [weak self] polls in
-                self?.polls = polls
+                guard let self else{ return }
+                
+                print("poll sink triggered")
+                
+                let newPolls = polls.filter {
+                    self.ingestedPollIDs.insert($0.id).inserted
+                }
+
+                guard !newPolls.isEmpty else { return }
+                
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.polls.append(contentsOf: newPolls)
+                }
             }
             .store(in: &cancellables)
     }
     
-    func getPollsIfNeeded(cityIds: [String]) async throws {
-        guard hasLoaded == false else { return }
-        isLoading = true
-        defer {
-            isLoading = false
-        }
-        do {
-            feedStore.loadedPolls = try await pollManager.fetchPolls(cityIds: cityIds)
-            hasLoaded = true
-        }
-        catch {
-            throw NetworkErrors.ErrorFetching
-        }
+    func fetchPoll(id: String) async throws -> PollWithOptions {
+        let poll = try await pollManager.fetchPollById(id: id)
+        return poll
+    }
+    
+    func removePollFromFeed(id: String) {
+        feedStore.loadedPolls.removeAll(where: {$0.id == id})
+    }
+    
+    func getInitialPolls(cityIds: [String]) async throws {
+        reset()
+        try await getMorePolls(cityIds: cityIds)
+    }
+    
+    func reset() {
+        feedStore.loadedPolls.removeAll()
+        hasLoaded = false
+        polls.removeAll()
+        hasMore = true
+        cursor = nil
+        ingestedPollIDs.removeAll()
     }
     
     func getMorePolls(cityIds: [String]) async throws {
+        guard !isLoading, hasMore else { return }
         isLoading = true
         defer {
             isLoading = false
+            hasLoaded = true
         }
         do {
-            let newPolls = try await pollManager.fetchPolls(cityIds: cityIds)
-            polls = []
-            feedStore.loadedPolls = newPolls
+            let response = try await pollManager.fetchPolls(cityIds: cityIds, cursor: cursor)
+            feedStore.loadedPolls.append(contentsOf: response.polls)
+            cursor = response.nextCursor
+            hasMore = response.nextCursor != nil
         }
         catch {
             throw NetworkErrors.ErrorFetching
@@ -97,6 +128,27 @@ class PollsViewModel: ObservableObject {
         }
     }
     
+    func refreshFeedPoll(pollId: String, optionToAdd: String, optionToSubtract: String) {
+        if let index = feedStore.loadedPolls.firstIndex(where: {$0.id == pollId}) {
+            var poll = feedStore.loadedPolls[index]
+            if optionToAdd != "" {
+                if let optionIdx = poll.options.firstIndex(where: {$0.id == optionToAdd}) {
+                    poll.options[optionIdx].voteCount += 1
+                    poll.poll.totalVotes += 1
+                }
+            }
+            if optionToSubtract != "" {
+                if let optionIdx = poll.options.firstIndex(where: {$0.id == optionToSubtract}) {
+                    poll.options[optionIdx].voteCount -= 1
+                    poll.poll.totalVotes -= 1
+                }
+            }
+            PollCache.shared.cacheOptions(pollId: pollId, options: poll.options)
+            feedStore.loadedPolls[index] = poll
+        }
+        polls = feedStore.loadedPolls
+    }
+    
     func getPollChoice(pollId: String) -> String {
         return CoreDataManager.shared.getPollChoice(pollId: pollId)
     }
@@ -114,6 +166,8 @@ class PollsViewModel: ObservableObject {
     func deletePoll(pollId: String) async throws {
         guard pollId != "" else {return}
         try await pollManager.deletePoll(pollId: pollId)
+        feedStore.loadedPolls.removeAll(where: {$0.id == pollId})
+        polls.removeAll(where: {$0.id == pollId})
     }
 }
 

@@ -47,7 +47,7 @@ struct OnboardingView: View {
     
     @State var welcomed: Bool = false
     
-    let onboardingTabs: [OnboardingTab] = [.policy, .username, .email, .password, .city]
+    let onboardingTabs: [OnboardingTab] = [.username, .email, .password, .city, .policy]
     
     @FocusState private var focusedField: Field?
     enum Field { case username, email, password }
@@ -181,11 +181,13 @@ struct OnboardingView: View {
 
             // Get Started Button
             Button(action: {
-                welcomed = true
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    welcomed = true
+                }
             }) {
                 Text("Get Started")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.theme.background)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
@@ -200,19 +202,82 @@ struct OnboardingView: View {
     
     var policy: some View {
         VStack {
-            Text("Privacy Policy")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Button(action: {onSwipeLeft()}, label: {
-                Text("Agree")
-                    .font(.title3)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.theme.darkBlue)
-                    .cornerRadius(10)
-            })
+            // TOP CONTENT
+            VStack(spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(Color.theme.lightBlue.opacity(0.18))
+                        .frame(width: 100, height: 100)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.theme.lightGray.opacity(0.25), lineWidth: 1)
+                        )
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.system(size: 40, weight: .semibold))
+                        .foregroundStyle(Color.theme.darkBlue)
+                        .symbolRenderingMode(.hierarchical)
+                }
+
+                Text("By signing up you agree to the Terms of Service and Privacy Policy.")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+
+                Text("Please review the following documents:")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 96)
+
+            // LINKS LIST
+            VStack(spacing: 12) {
+                policyLinkRow(title: "Terms of Service")
+                policyLinkRow(title: "Privacy Policy")
+                policyLinkRow(title: "Community Guidelines")
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            Spacer()
+
+            if submitError != "" {
+                Text(submitError)
+                    .font(.body)
+                    .foregroundStyle(Color.theme.darkRed)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal)
+            }
+
+            // FULL-WIDTH AGREE BUTTON
+            Button(action: {
+                submitSignup()
+            }) {
+                HStack {
+                    if isSubmitLoading == false {
+                        Text("Agree & Sign Up")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        CircularLoadingView(color: Color.theme.background)
+                            .frame(width: 20, height: 20)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 16)
+                .background(
+                    Capsule()
+                        .fill(Color.theme.darkBlue)
+                )
+            }
+            .foregroundColor(Color.theme.background)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 8)
+            .disabled(isSubmitLoading)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     var username: some View {
@@ -259,48 +324,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // BOTTOM BUTTONS
-            HStack(spacing: 0) {
-                Button(action: {
-                    onSwipeRight()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.footnote)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                        Text("Back")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .glassEffect()
-                }
-                
-                Spacer()
-
-                Button(action: {
-                    onSwipeLeft()
-                }) {
-                    HStack(spacing: 6) {
-                        Text("Next")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Image(systemName: "chevron.right")
-                            .font(.footnote)
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.darkBlue)
-                    )
-                    .foregroundColor(.white)
-                }
-            }
-            .padding(.bottom, 8)
-            .padding(.horizontal, 32)
+            OnboardingBottomButtons(onBack: { onSwipeRight() }, onNext: { onSwipeLeft() })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -340,48 +364,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // BOTTOM BUTTONS
-            HStack(spacing: 0) {
-                Button(action: {
-                    onSwipeRight()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.footnote)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                        Text("Back")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .glassEffect()
-                }
-                
-                Spacer()
-
-                Button(action: {
-                    onSwipeLeft()
-                }) {
-                    HStack(spacing: 6) {
-                        Text("Next")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Image(systemName: "chevron.right")
-                            .font(.footnote)
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.darkBlue)
-                    )
-                    .foregroundColor(.white)
-                }
-            }
-            .padding(.bottom, 8)
-            .padding(.horizontal, 32)
+            OnboardingBottomButtons(onBack: { onSwipeRight() }, onNext: { onSwipeLeft() })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -399,22 +382,21 @@ struct OnboardingView: View {
                     .foregroundColor(.secondary)
 
                 HStack {
-                    Group {
-                        if showPassword {
-                            TextField("Password", text: $passwordInput)
-                                .textInputAutocapitalization(.never)
-                                .focused($focusedField, equals: .password)
-                                .autocorrectionDisabled()
-                        } else {
-                            SecureField("Password", text: $passwordInput)
-                                .textInputAutocapitalization(.never)
-                                .focused($focusedField, equals: .password)
-                                .autocorrectionDisabled()
-                            
-                        }
+                    ZStack {
+                        TextField("Password", text: $passwordInput)
+                            .focused($focusedField, equals: .password)
+                            .opacity(showPassword ? 1 : 0)
+                        SecureField("Password", text: $passwordInput)
+                            .focused($focusedField, equals: .password)
+                            .opacity(showPassword ? 0 : 1)
                     }
+                    .submitLabel(.done)
+                    .frame(height: 20)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
                     .padding()
-                    .onChange(of: usernameInput, {
+                    .id("password")
+                    .onChange(of: passwordInput, {
                         passwordInput = passwordInput.replacingOccurrences(of: " ", with: "")
                             .replacingOccurrences(of: "\t", with: "")
                             .replacingOccurrences(of: "\n", with: "")
@@ -487,48 +469,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // BOTTOM BUTTONS (same as email)
-            HStack(spacing: 0) {
-                Button(action: {
-                    onSwipeRight()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.footnote)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                        Text("Back")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .glassEffect()
-                }
-
-                Spacer()
-
-                Button(action: {
-                    onSwipeLeft()
-                }) {
-                    HStack(spacing: 6) {
-                        Text("Next")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Image(systemName: "chevron.right")
-                            .font(.footnote)
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.darkBlue)
-                    )
-                    .foregroundColor(.white)
-                }
-            }
-            .padding(.bottom, 8)
-            .padding(.horizontal, 32)
+            OnboardingBottomButtons(onBack: { onSwipeRight() }, onNext: { onSwipeLeft() })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -581,7 +522,7 @@ struct OnboardingView: View {
                 .frame(height: 55)
                 .background(
                     Rectangle()
-                        .fill(Color.white.opacity(0.001))
+                        .fill(Color.theme.background.opacity(0.001))
                         .onTapGesture {
                             if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
                                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -601,68 +542,7 @@ struct OnboardingView: View {
 
             Spacer()
             
-            if submitError != "" {
-                Text(submitError)
-                    .font(.body)
-                    .foregroundStyle(Color.theme.darkRed)
-                    .padding(.bottom, 32)
-                    .padding(.horizontal)
-            }
-
-            // BOTTOM BUTTONS (same as email)
-            HStack(spacing: 0) {
-                Button(action: {
-                    onSwipeRight()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.footnote)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                        Text("Back")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(Color.theme.gray.opacity(0.6))
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .glassEffect()
-                }
-
-                Spacer()
-
-                Button(action: {
-                    submitSignup()
-                }) {
-                    HStack(spacing: 6) {
-                        if isSubmitLoading == false {
-                            Text("Finish")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Image(systemName: "chevron.right")
-                                .font(.footnote)
-                        }
-                        else {
-                            Image(systemName: "chevron.right")
-                                .font(.footnote)
-                                .opacity(0)
-                            CircularLoadingView(color: Color.theme.white)
-                                .frame(width: 20, height: 20)
-                            Image(systemName: "chevron.right")
-                                .font(.footnote)
-                                .opacity(0)
-                        }
-                    }
-                    .padding(.horizontal, 52)
-                    .padding(.vertical, 14)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.darkBlue)
-                    )
-                    .foregroundColor(.white)
-                }
-            }
-            .padding(.bottom, 8)
-            .padding(.horizontal, 32)
+            OnboardingBottomButtons(onBack: { onSwipeRight() }, onNext: { onSwipeLeft() })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -693,6 +573,7 @@ struct OnboardingView: View {
             pageDirection = .backward
             withAnimation {
                 welcomed = false
+                UIApplication.shared.endEditing()
             }
             return
         }
@@ -706,7 +587,7 @@ struct OnboardingView: View {
     func customField(_ placeholder: String, text: Binding<String>) -> some View {
         TextField(placeholder, text: text)
             .padding()
-            .background(Color.white.opacity(0.12))
+            .background(Color.theme.background.opacity(0.12))
             .cornerRadius(10)
             .foregroundColor(Color.theme.accent)
             .autocapitalization(.none)
@@ -716,7 +597,7 @@ struct OnboardingView: View {
     func customSecureField(_ placeholder: String, text: Binding<String>) -> some View {
         SecureField(placeholder, text: text)
             .padding()
-            .background(Color.white.opacity(0.12))
+            .background(Color.theme.background.opacity(0.12))
             .cornerRadius(10)
             .foregroundColor(Color.theme.accent)
             .autocapitalization(.none)
@@ -771,6 +652,35 @@ struct OnboardingView: View {
         .frame(height: 55)
     }
     
+    private func policyLinkRow(title: String) -> some View {
+        HStack(spacing: 0) {
+            Image(systemName: "doc.text")
+                .font(.subheadline.bold())
+                .foregroundColor(Color.theme.darkBlue)
+                .padding(8)
+
+            Text(title)
+                .font(.body)
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.footnote)
+                .foregroundStyle(Color.theme.gray.opacity(0.6))
+                .padding(8)
+        }
+        .padding(.horizontal)
+        .frame(height: 55)
+        .background(
+            Rectangle()
+                .fill(Color.theme.background.opacity(0.001))
+                .onTapGesture {
+                    // TODO: Open link for \(title)
+                }
+        )
+        .glassEffect()
+    }
+    
     func validatePassword(_ password: String) -> Bool {
         passwordLength = password.count > 7
         passwordCapLetter = password.rangeOfCharacter(from: .uppercaseLetters) != nil
@@ -806,30 +716,113 @@ struct OnboardingView: View {
             if passvalid && emailvalid && usernameAppropriate && usernameExist {
                 do {
                     try await vm.signInEmailAndPassword(email: emailInput, password: passwordInput, username: usernameInput.replacingOccurrences(of: "  ", with: ""))
+                    UserListenerManager.shared.startListening()
                 }
                 catch {
                     submitError = error.localizedDescription
                 }
             }
             else {
-                pageDirection = .backward
+                // Determine which page to return to based on validation failures
+                var targetIndex = currentOnboardingTabIndex
                 if passvalid != true {
-                    currentOnboardingTabIndex = 3
+                    targetIndex = 3
                 }
                 if emailvalid != true {
                     showEmailError = true
-                    currentOnboardingTabIndex = 2
+                    targetIndex = 2
                 }
                 if usernameAppropriate != true {
                     showUsernameError = true
-                    currentOnboardingTabIndex = 1
+                    targetIndex = 1
                 }
                 if !usernameExist {
                     usernameExistError = true
-                    currentOnboardingTabIndex = 1
+                    targetIndex = 1
+                }
+                // Animate as a backward transition (slide right) from Policy back to the required page
+                pageDirection = .backward
+                withAnimation {
+                    currentOnboardingTabIndex = targetIndex
                 }
             }
             isSubmitLoading = false
+        }
+    }
+    
+    // MARK: - Reusable Bottom Buttons
+    struct OnboardingBottomButtons: View {
+        var onBack: () -> Void
+        var onNext: () -> Void
+
+        var body: some View {
+            GeometryReader { proxy in
+                let totalWidth = proxy.size.width
+                let buttonWidth = max(140, totalWidth / 3) // about a third, with a sensible minimum
+
+                HStack(spacing: 16) {
+                    Button(action: { onBack() }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                                .font(.footnote)
+                            Text("Back")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .foregroundStyle(Color.theme.gray.opacity(0.8))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            Capsule()
+                                .fill(Color.theme.background.opacity(0.12))
+                        )
+                        .overlay(
+                            Capsule()
+                                .fill(Color.white.opacity(0.06))
+                                .blur(radius: 2)
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.theme.lightGray.opacity(0.35), lineWidth: 1)
+                        )
+                        .contentShape(Capsule())
+                    }
+                    .frame(width: buttonWidth, height: 55)
+
+                    Spacer()
+
+                    Button(action: { onNext() }) {
+                        HStack(spacing: 6) {
+                            Text("Next")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote)
+                        }
+                        .foregroundColor(Color.theme.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            Capsule()
+                                .fill(Color.theme.darkBlue)
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.theme.darkBlue.opacity(0.001), lineWidth: 1)
+                        )
+                        .contentShape(Capsule())
+                    }
+                    .frame(width: buttonWidth, height: 55)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+            .frame(height: 55)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 8)
         }
     }
 }

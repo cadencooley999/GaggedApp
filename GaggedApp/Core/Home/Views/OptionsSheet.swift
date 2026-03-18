@@ -10,23 +10,33 @@ import SwiftUI
 struct OptionsSheet: View {
     
     @AppStorage("userId") var userId = ""
+    @AppStorage("isAdmin") var isAdmin = false
     
     var parentPostId: String?
     
     @Binding var selectedItemForOptions: GenericItem?
     @Binding var showOptionsSheet: Bool
     @Binding var showPostView: Bool
+    @Binding var showPollView: Bool
     
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var profileViewModel: ProfileViewModel
     @EnvironmentObject var pollsViewModel: PollsViewModel
+    @EnvironmentObject var homeViewModel: HomeViewModel
+    @EnvironmentObject var searchViewModel: SearchViewModel
+    @EnvironmentObject var inspectionViewModel: InspectionViewModel
 //    @EnvironmentObject var eventViewModel: EventViewModel
+    
+    @Binding var showReportSheet: Bool
+    @Binding var preReportInfo: preReportModel?
+    
+    let screenType: ScreenType
     
     @State var isSaved: Bool = false
     
     var body: some View {
         ZStack {
-            Color.white
+            Color(.systemGroupedBackground)
                 .ignoresSafeArea()
             VStack {
                 if case .comment(_) = selectedItemForOptions {
@@ -35,35 +45,36 @@ struct OptionsSheet: View {
                 else {
                     HStack(spacing: 12) {
                         // Share button
-                        VStack(spacing: 8) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.title2)
-                                .foregroundStyle(Color.theme.accent)
-                            Text("Share")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.theme.accent)
-                        }
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
-                        .onTapGesture {
-                            // TODO: Implement share action
+                        ShareLink(item: generateDeepLink()) {
+                            VStack(spacing: 10) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 24))
+                                    .foregroundStyle(Color.theme.accent)
+                                Text("Share")
+                                    .font(.callout)
+                                    .foregroundStyle(Color.theme.accent)
+                            }
+                            .padding(.vertical, 18)
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: 70)
+                            .contentShape(Rectangle())
+                            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
                         }
 
                         // Save button
-                        VStack(spacing: 8) {
+                        VStack(spacing: 10) {
                             Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                                .font(.title2)
+                                .font(.system(size: 24))
                                 .foregroundStyle(Color.theme.accent)
                             Text(isSaved ? "Saved" : "Save")
-                                .font(.caption.weight(.semibold))
+                                .font(.callout)
                                 .foregroundStyle(Color.theme.accent)
                         }
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, minHeight: 70)
                         .contentShape(Rectangle())
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
                         .onTapGesture {
                             if !isSaved {
                                 if let selected = selectedItemForOptions {
@@ -96,7 +107,8 @@ struct OptionsSheet: View {
                 actionsList
                 Spacer()
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
             .padding(.top, 8)
             .task {
                 if let selected = selectedItemForOptions {
@@ -124,53 +136,74 @@ struct OptionsSheet: View {
                 EmptyView()
             } else {
                 HStack(spacing: 12) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 12) {
                         Image(systemName: "flag")
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(Color.theme.brightRed)
                         Text("Report")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.callout.weight(.semibold))
                             .foregroundStyle(Color.theme.brightRed)
                         Spacer()
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 56)
                     .contentShape(Rectangle())
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
+                }
+                .onTapGesture {
+                    showOptionsSheet = false
+                    showReportSheet = true
                 }
             }
 
-            if selectedItemForOptions?.authorId == userId {
+            if (selectedItemForOptions?.authorId == userId) || isAdmin {
                 HStack(spacing: 12) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 12) {
                         Image(systemName: "trash")
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(Color.theme.brightRed)
                         Text("Delete")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.callout.weight(.semibold))
                             .foregroundStyle(Color.theme.brightRed)
                         Spacer()
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 56)
                     .contentShape(Rectangle())
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
                     .onTapGesture {
                         Task {
                             if let selected = selectedItemForOptions {
                                 switch selected {
                                 case .post(let post):
+                                    showOptionsSheet = false
                                     try await postViewModel.deletePost(postId: post.id)
-                                    showOptionsSheet = false
+                                    homeViewModel.removePostFromFeed(postId: post.id)
                                     showPostView = false
-                                    try await profileViewModel.getMoreUserPosts()
+                                    await profileViewModel.loadInitialUserPosts()
                                 case .poll(let poll):
-                                    try await pollsViewModel.deletePoll(pollId: poll.id)
                                     showOptionsSheet = false
-                                    try await profileViewModel.getMoreUserPolls()
+                                    try await pollsViewModel.deletePoll(pollId: poll.id)
+                                    switch screenType {
+                                    case .searchFeed:
+                                        try await searchViewModel.loadInitialGlobalPolls()
+                                    case .pollsFeed:
+//                                        try await pollsViewModel.getInitialPolls(cityIds: LocationManager.shared.citiesInRange)
+                                        break
+                                    case .profileFeed:
+                                        await profileViewModel.loadInitialUserPolls()
+                                    case .savedFeed:
+                                        try await profileViewModel.refreshSaved()
+                                    case .inspectionFeed:
+                                        await inspectionViewModel.loadInitialReportedPolls()
+                                    }
+                            
                                 case .comment(let comment):
                                     if let postId = parentPostId {
-                                        try await postViewModel.deleteComment(commentId: comment.id, postId: postId)
-                                        try await postViewModel.fetchComments()
                                         showOptionsSheet = false
+                                        try await postViewModel.deleteComment(commentId: comment.id, postId: postId, ancestorId: comment.ancestorId)
                                     }
                                 }
                             }
@@ -180,4 +213,21 @@ struct OptionsSheet: View {
             }
         }
     }
+    
+    func generateDeepLink() -> String {
+        var urlString = "https://gaggedapp.web.app/"
+        if let selected = selectedItemForOptions {
+            switch selected {
+                
+            case .post(_):
+                urlString.append("post/\(selected.id)")
+            case .comment(_):
+                urlString.append("")
+            case .poll(_):
+                urlString.append("poll/\(selected.id)")
+            }
+        }
+        return urlString
+    }
 }
+

@@ -16,7 +16,7 @@ final class AddPostViewModel: ObservableObject {
     
     @AppStorage("userId") var userId = ""
     @AppStorage("username") var username = ""
-    @AppStorage("profImageUrl") var profImageUrl = ""
+    @AppStorage("chosenProfileImageAddress") var profImageUrl = ""
     
     @Published var pickedImage: UIImage? = nil
     @Published var imageSelection: PhotosPickerItem? = nil {
@@ -87,11 +87,13 @@ final class AddPostViewModel: ObservableObject {
             let authorId = userId
             let imageId = UUID().uuidString
             
-            let imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
+            let imageUrl = try await storageManager.uploadImage(image, imageId: imageId, userId: userId)
             
             let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, tags: selectedTags.map({$0.title}), keywords: [], upvotes: 0, downvotes: 0)
+            print(post.name, "postname")
             try await postManager.uploadPost(post: post)
             UserManager.shared.addGags(userId: userId, contributionType: .post)
+            try await UserManager.shared.addPostToUser(userId: userId)
             return true
         } catch {
             print("❌ Failed with error: \(error.localizedDescription)")
@@ -121,7 +123,7 @@ final class AddPostViewModel: ObservableObject {
             var imageUrl = ""
             var imageId = UUID().uuidString
             if let image = image {
-                imageUrl = try await storageManager.uploadImage(image, imageId: imageId)
+                imageUrl = try await storageManager.uploadImage(image, imageId: imageId, userId: userId)
             }
             let event = EventModel(id: "", name: name, locationDetails: locationDetails, date: date, rsvps: rsvps, imageUrl: imageUrl, description: description, authorId: userId, authorName: username, cityId: cityId, keywords: [])
             try await eventManager.uploadEvent(event: event)

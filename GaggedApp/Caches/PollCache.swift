@@ -22,4 +22,8 @@ class PollCache {
     func digPollOptions(pollId: String) -> [PollOption]? {
         return optionsCache[pollId]
     }
+    
+    func clearCache() {
+        pollCache = [:]
+    }
 }

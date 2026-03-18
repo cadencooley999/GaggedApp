@@ -22,6 +22,7 @@ struct ProfileView: View {
     
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress: String = ""
     @AppStorage("username") var username: String = ""
+    @AppStorage("isAdmin") var isAdmin: Bool = false
     
     @EnvironmentObject var vm: ProfileViewModel
     @EnvironmentObject var postViewModel: PostViewModel
@@ -35,14 +36,18 @@ struct ProfileView: View {
     @Binding var showEventView: Bool
     @Binding var showSettingsView: Bool
     @Binding var showProfileView: Bool
+    @Binding var showPollView: Bool
+    @Binding var showReportView: Bool
+    @Binding var preReportInfo: preReportModel?
+    @Binding var showInspectionView: Bool
     
     @State var showSearchSheet: Bool = false
     @State private var previousTabIndex: Int = 0
     @State var showImageOverlay: Bool = false
-    @Namespace private var animation
+    @Namespace private var profilePicNamespace
     @State var isPressed: Bool = false
     
-    let topTabs: [TopTab] = [TopTab(title: "Posts"), TopTab(title: "Comments"), TopTab(title: "Polls"), TopTab(title: "Upvoted"), TopTab(title: "Saved"), TopTab(title: "Achievements")]
+    let topTabs: [TopTab] = [TopTab(title: "Posts"), TopTab(title: "Comments"), TopTab(title: "Polls"), TopTab(title: "Upvoted"), TopTab(title: "Saved")]
     
     @State var currentIndex: Int = 0
     
@@ -73,10 +78,10 @@ struct ProfileView: View {
                             .frame(maxWidth: .infinity)
                             .padding()
                     }
-                    .background(.white)
+                    .background(Color.theme.background)
                     sectionPicker
                         .frame(maxWidth: .infinity)
-                        .background(Rectangle().fill(.white).mask(LinearGradient(stops: [
+                        .background(Rectangle().fill(Color.theme.background).mask(LinearGradient(stops: [
                             .init(color: .black.opacity(1), location: 0.1),
                             .init(color: .black.opacity(0.9), location: 0.5),
                             .init(color: .black.opacity(0.7), location: 0.7),
@@ -86,14 +91,14 @@ struct ProfileView: View {
                 Spacer()
             }
             if showImageOverlay {
-                ImageOverlay(imageAddress: chosenProfileImageAddress, showImageOverlay: $showImageOverlay)
+                ImageOverlay(imageAddress: chosenProfileImageAddress, showImageOverlay: $showImageOverlay, namespace: profilePicNamespace)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showImageOverlay)
         .task {
-            Task {
-                try await vm.getUserPostsIfNeeded()
-                try await vm.loadUserInfoIfNeeded()
+            try? await vm.loadUserInfoIfNeeded()
+            if !vm.hasLoadedPosts {
+                await vm.loadInitialUserPosts()
             }
         }
         .sheet(isPresented: $showSearchSheet) {
@@ -124,10 +129,30 @@ struct ProfileView: View {
                         showProfileView = false
                     }
                 }
+            Image(systemName: "eye")
+                .font(.title3)
+                .padding(8)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .opacity(0)
             Spacer()
             Text("Profile")
                 .font(.headline)
             Spacer()
+            Image(systemName: "eye")
+                .font(.title3)
+                .padding(8)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .glassEffect(.regular.interactive())
+                .opacity(vm.loadedUser.isAdmin ? 1 : 0)
+                .onTapGesture {
+                    if vm.loadedUser.isAdmin {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showInspectionView = true
+                        }
+                    }
+                }
             Image(systemName: "line.3.horizontal")
                 .font(.title3)
                 .padding(8)
@@ -156,7 +181,9 @@ struct ProfileView: View {
                         isPressed = true
                     }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: {
-                        showImageOverlay = true
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            showImageOverlay = true
+                        }
                         isPressed = false
                     })
                 }
@@ -167,11 +194,17 @@ struct ProfileView: View {
                         .font(.title3)
                         .fontWeight(.semibold)
                         .truncationMode(.tail)
+                    if vm.loadedUser.isAdmin {
+                        Text("Admin")
+                            .font(.subheadline.italic())
+                            .foregroundStyle(Color.theme.darkBlue)
+                            .padding(.leading, 4)
+                    }
                     Spacer()
                 }
                 HStack(spacing: 16){
                     HStack {
-                        Text("\(vm.userPosts.count)")
+                        Text("\(vm.loadedUser.numPosts)")
                             .font(.body)
                             .fontWeight(.bold)
                         Text("Posts")
@@ -197,24 +230,8 @@ struct ProfileView: View {
     }
     
     var postSection: some View {
-        ScrollView {
-            if !vm.hasLoadedPosts {
-                VStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .frame(maxWidth: windowSize.size.width)
-            } else if vm.userPosts.isEmpty {
-                VStack {
-                    Image(systemName: "camera")
-                        .frame(width: 100, height: 100)
-                    Text("No posts yet...")
-                        .font(.title3)
-                }
-                .frame(maxWidth: windowSize.size.width)
-                .padding(.top, 132)
-            } else {
+        ScrollView(showsIndicators: false)  {
+            if !vm.userPosts.isEmpty {
                 LazyVGrid (columns: columns, spacing: 8){
                     ForEach(vm.userPosts) { post in
                         TinyPostView(post: post, width: windowSize.size.width / 3 - 16, height: (windowSize.size.width / 3 - 16)*(5/4))
@@ -226,37 +243,53 @@ struct ProfileView: View {
                                 }
                                 Task {
                                     postViewModel.commentsIsLoading = true
-                                    try await postViewModel.fetchComments()
+                                    try await postViewModel.loadInitialRootComments()
                                     postViewModel.commentsIsLoading = false
+                                }
+                            }
+                            .onAppear {
+                                if post.id == vm.userPosts.last?.id {
+                                    Task {
+                                        await vm.getUserPosts()
+                                    }
                                 }
                             }
                     }
                 }
+                .transition(.opacity)
+                .padding(.top, 132)
+                .padding(.bottom, vm.hasMoreUserPosts ? 300 : 0)
+            }
+            if !vm.hasLoadedPosts {
+                VStack {
+                    ProgressView()
+                }
+                .frame(maxWidth: windowSize.size.width)
+                .padding(.top, vm.userPosts.isEmpty ? 180 : -80)
+            } else if vm.userPosts.isEmpty {
+                VStack {
+                    Image(systemName: "camera")
+                        .frame(width: 100, height: 100)
+                    Text("No posts yet...")
+                        .font(.title3)
+                }
+                .frame(maxWidth: windowSize.size.width)
                 .padding(.top, 132)
             }
         }
         .refreshable {
-            Task {
-                try await vm.getMoreUserPosts()
-            }
+            await vm.loadInitialUserPosts()
         }
     }
     
     var commentSection: some View {
-        ScrollView {
-            if !vm.hasLoadedComments {
-                VStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
-            } else if !vm.userComments.isEmpty {
-                VStack(spacing: 12) {
+        ScrollView(showsIndicators: false)  {
+            if !vm.userComments.isEmpty  {
+                LazyVStack(spacing: 12) {
                     ForEach(vm.userComments) { comment in
                         HStack(alignment: .top, spacing: 10) {
                             // Card
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(alignment: .top, spacing: 6) {
                                 ProfilePic(address: chosenProfileImageAddress, size: 30)
                                     .padding(.leading, 6)
                                     .padding(.top, 12)
@@ -295,7 +328,7 @@ struct ProfileView: View {
                             }
                             .background(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(.white)
+                                    .fill(.ultraThinMaterial)
                             )
                             .shadow(color: .black.opacity(0.10), radius: 8, x: 6)
 
@@ -310,7 +343,7 @@ struct ProfileView: View {
                                         showPostView = true
                                     }
                                     postViewModel.commentsIsLoading = true
-                                    try await postViewModel.fetchComments()
+                                    try await postViewModel.loadInitialRootComments()
                                     postViewModel.commentsIsLoading = false
                                 }
                             } label: {
@@ -323,11 +356,26 @@ struct ProfileView: View {
                                     .glassEffect(.regular.interactive())
                             }
                         }
+                        .onAppear {
+                            if comment.id == vm.userComments.last?.id {
+                                Task {
+                                    await vm.getUserComments()
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(.top, 132)
                 .padding(.horizontal)
-            } else {
+                .padding(.bottom, vm.hasMoreUserComments ? 300 : 0)
+            }
+            if !vm.hasLoadedComments {
+                VStack {
+                    ProgressView()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, vm.userComments.isEmpty ? 180 : -80)
+            } else if vm.userComments.isEmpty {
                 VStack {
                     Image(systemName: "ellipsis.message")
                         .frame(width: 100, height: 100)
@@ -339,29 +387,50 @@ struct ProfileView: View {
             }
         }
         .task {
-            Task {
-                try await vm.getCommentsIfNeeded()
-                print("Fetching Comments")
+            if !vm.hasLoadedComments {
+                await vm.loadInitialUserComments()
             }
         }
         .refreshable {
-            Task {
-                try await vm.getMoreUserComments()
-            }
+            await vm.loadInitialUserComments()
         }
     }
     
     var pollSection: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false)  {
+            if !vm.userPolls.isEmpty {
+                LazyVStack (spacing: 8){
+                    ForEach(vm.userPolls, id: \.compositeID) { poll in
+                        MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, screenType: .profileFeed)
+                            .padding()
+                            .onTapGesture {
+                                if poll.options.count > 0 {
+                                    vm.clearOptions(for: poll.id)
+                                } else {
+                                    Task {
+                                        try await vm.loadOptions(for: poll.id)
+                                    }
+                                }
+                            }
+                            .onAppear {
+                                if poll.id == vm.userPolls.last?.id {
+                                    Task {
+                                        await vm.getUserPolls()
+                                    }
+                                }
+                            }
+                    }
+                }
+                .padding(.top, 132)
+                .padding(.bottom, vm.hasMoreUserPolls ? 300 : 0)
+            }
             if !vm.hasLoadedPolls {
                 VStack {
-                    Spacer()
                     ProgressView()
-                    Spacer()
                 }
                 .frame(maxWidth: .infinity)
-            }
-            if vm.userPolls.isEmpty {
+                .padding(.top, vm.userPolls.isEmpty ? 180 : -80)
+            } else if vm.userPolls.isEmpty {
                 VStack {
                     Image(systemName: "chart.bar.horizontal.page")
                         .frame(width: 100, height: 100)
@@ -371,46 +440,25 @@ struct ProfileView: View {
                 .frame(maxWidth: windowSize.size.width)
                 .padding(.top, 132)
             }
-            else {
-                VStack (spacing: 8){
-                    ForEach(vm.userPolls, id: \.poll.id) { poll in
-                        MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView)
-                            .padding()
-                            .onTapGesture {
-                                if poll.options.count > 0 {
-                                    vm.clearOptions(for: poll.poll.id)
-                                } else {
-                                    Task {
-                                        try await vm.loadOptions(for: poll.poll.id)
-                                    }
-                                }
-                            }
-                    }
-                }
-                .padding(.top, 132)
-            }
         }
         .task {
-            Task {
-                try await vm.getUserPollsIfNeeded()
+            if !vm.hasLoadedPolls {
+                await vm.loadInitialUserPolls()
             }
         }
         .refreshable {
-            Task {
-                print("refreshing")
-                try await vm.getMoreUserPolls()
-            }
+            PollCache.shared.clearCache()
+            await vm.loadInitialUserPolls()
         }
     }
     
     var savedSection: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false)  {
             if !vm.hasLoadedSaved {
                 VStack {
-                    Spacer()
                     ProgressView()
-                    Spacer()
                 }
+                .padding(.top, 180)
                 .frame(maxWidth: .infinity)
             } else {
                 VStack(alignment: .leading, spacing: 0){
@@ -441,7 +489,7 @@ struct ProfileView: View {
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.fetchComments()
+                                        try await postViewModel.loadInitialRootComments()
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }
@@ -455,15 +503,15 @@ struct ProfileView: View {
                             .padding(8)
                     }
                     VStack (spacing: 8){
-                        ForEach(vm.savedPolls, id: \.poll.id) { poll in
-                            MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView)
+                        ForEach(vm.savedPolls, id: \.compositeID) { poll in
+                            MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, screenType: .profileFeed)
                                 .padding(8)
                                 .onTapGesture {
                                     if poll.options.count > 0 {
-                                        vm.savedClearOptions(for: poll.poll.id)
+                                        vm.savedClearOptions(for: poll.id)
                                     } else {
                                         Task {
-                                            try await vm.savedLoadOptions(for: poll.poll.id)
+                                            try await vm.savedLoadOptions(for: poll.id)
                                         }
                                     }
                                 }
@@ -475,6 +523,7 @@ struct ProfileView: View {
         }
         .refreshable {
             Task {
+                PollCache.shared.clearCache()
                 try await vm.refreshSaved()
             }
         }
@@ -486,25 +535,8 @@ struct ProfileView: View {
     }
     
     var upvotedSection: some View {
-        ScrollView {
-            if !vm.hasLoadedUpvoted {
-                VStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
-            } else if vm.upvotedPosts.isEmpty {
-                VStack {
-                    Image(systemName: "arrow.up")
-                        .frame(width: 100, height: 100)
-                    Text("Haven't seen anything you like?")
-                        .font(.title3)
-                }
-                .padding(.top, 132)
-                .frame(width: windowSize.size.width)
-            }
-            else {
+        ScrollView(showsIndicators: false)  {
+            if !vm.upvotedPosts.isEmpty {
                 LazyVGrid (columns: columns, spacing: 8){
                     ForEach(vm.upvotedPosts) { post in
                         TinyPostView(post: post, width: windowSize.size.width / 3 - 16, height: (windowSize.size.width / 3 - 16)*(5/4))
@@ -516,22 +548,46 @@ struct ProfileView: View {
                                 }
                                 Task {
                                     postViewModel.commentsIsLoading = true
-                                    try await postViewModel.fetchComments()
+                                    try await postViewModel.loadInitialRootComments()
                                     postViewModel.commentsIsLoading = false
                                 }
                             }
+                            .onAppear {
+                                if post.id == vm.upvotedPosts.last?.id {
+                                    Task {
+                                        await vm.getUpvotedPosts()
+                                    }
+                                }
+                            }
+                            .transition(.opacity)
                     }
+                }
+                .padding(.top, 132)
+                .padding(.bottom, vm.hasMoreUpvotedPosts ? 300 : 0)
+            }
+            if !vm.hasLoadedUpvoted {
+                VStack {
+                    ProgressView()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, vm.upvotedPosts.isEmpty ? 180 : -80)
+            } else if vm.upvotedPosts.isEmpty {
+                VStack {
+                    Image(systemName: "arrow.up")
+                        .frame(width: 100, height: 100)
+                    Text("Haven't seen anything you like?")
+                        .font(.title3)
                 }
                 .padding(.top, 132)
             }
         }
         .refreshable {
-            print("refreshing")
-            vm.getMoreUpvotedPosts()
+            await vm.loadInitialUpvotedPosts()
         }
         .task {
-            print("task")
-            vm.getUpvotedPostsIfNeeded()
+            if !vm.hasLoadedUpvoted {
+                await vm.loadInitialUpvotedPosts()
+            }
         }
     }
     
@@ -542,7 +598,7 @@ struct ProfileView: View {
                     Text(tab.title)
                         .font(.body.weight(.medium))
                         .foregroundStyle(
-                            selectedTopTab.title == tab.title ? .white : .primary
+                            selectedTopTab.title == tab.title ? Color.theme.background : Color.theme.accent
                         )
                         .padding(.vertical, 10)
                         .padding(.horizontal, 12)
@@ -579,7 +635,7 @@ struct ProfileView: View {
                 case "Saved":
                     savedSection
                 default:
-                    Color.white
+                    Background()
                 }
             }
             // Dynamic transition based on navigation direction
@@ -736,10 +792,12 @@ struct ImageOverlay: View {
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress: String = ""
 
     var imageAddress: String
-    let addresses = loadSequentialImages(prefix: "ProfPic")
+    @State var addresses: [String] = loadSequentialImages(prefix: "ProfPic")
     
     @State private var newChosenAddress: String? = nil
     @Binding var showImageOverlay: Bool
+    
+    var namespace: Namespace.ID
     
     @State private var columns: [GridItem] = [
         GridItem(.adaptive(minimum: 72, maximum: 100), spacing: 16)
@@ -747,7 +805,7 @@ struct ImageOverlay: View {
     
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
+            Color.theme.background.ignoresSafeArea()
             
             VStack(spacing: 0) {
                 
@@ -760,7 +818,7 @@ struct ImageOverlay: View {
                         .contentShape(Rectangle())
                         .glassEffect(.regular.interactive())
                         .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                 showImageOverlay = false
                             }
                         }
@@ -802,6 +860,7 @@ struct ImageOverlay: View {
                                     .onTapGesture {
                                         newChosenAddress = address
                                     }
+                                    .padding(.bottom, 8)
                             }
                         }
                         Spacer()
@@ -827,7 +886,7 @@ struct ImageOverlay: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(newChosenAddress != nil ? Color.theme.darkBlue : Color.theme.darkBlue.opacity(0.4))
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.theme.background)
                         .cornerRadius(30)
                         .padding(.horizontal)
                 }
@@ -837,7 +896,9 @@ struct ImageOverlay: View {
             .padding(.horizontal)
         }
         .onAppear {
-            // Using adaptive grid; no need to mutate columns per address
+            if profVM.loadedUser.isAdmin {
+                addresses.append("AdminProfPic")
+            }
         }
     }
 }

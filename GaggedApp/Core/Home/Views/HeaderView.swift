@@ -22,6 +22,7 @@ struct HeaderView: View {
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var searchViewModel: SearchViewModel
     @EnvironmentObject var pollsViewModel: PollsViewModel
+    @EnvironmentObject var leaderViewModel: LeaderViewModel
     
     @Binding var showSearchView: Bool
     @Binding var selectedTab: TabBarItem
@@ -35,9 +36,9 @@ struct HeaderView: View {
     var body: some View {
         HStack(spacing: 0) {
             // Left: App name only (Logo removed as requested)
-            Text("Gagged")
+            Text("Ga!")
                 .font(.title.bold())
-                .foregroundColor(Color.theme.darkBlue)
+                .foregroundColor(Color.theme.accent)
             
             Spacer()
             
@@ -48,6 +49,7 @@ struct HeaderView: View {
                     .lineLimit(1)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
+                    .contentShape(Rectangle())
                     .glassEffect(.regular.interactive().tint(Color.theme.lightBlue.opacity(0.2)))
                     .onTapGesture {
                         showCityPicker = true
@@ -74,16 +76,25 @@ struct HeaderView: View {
                     Task {
                         rotation += 360
                         do {
-                            cityChoiceId = ""
-                            
+                            locationManager.clearLocationData()
                             let cities = try await locationManager.requestLocation()
-                            try await homeViewModel.fetchMorePosts(cities: cities)
-                            try await pollsViewModel.getMorePolls(cityIds: cities)
-                        } catch LocationError.permissionDenied {
-                            print("User denied location permission")
-                            // show alert / fallback city
+                            pollsViewModel.reset()
+                            homeViewModel.reset()
+                            leaderViewModel.reset()
+                            switch selectedTab.title {
+                            case "Home":
+                                await homeViewModel.loadInitialPostFeed(cityIds: cities)
+                            case "Polls":
+                                try await pollsViewModel.getInitialPolls(cityIds: cities)
+                            case "LeaderBoard":
+                                try await leaderViewModel.fetchMoreLeaderboards(cities: cities)
+                            default:
+                                break
+                            }
                         } catch {
-                            print("Location failed:", error)
+                            print("User denied location permission")
+                            
+                            // show alert / fallback city
                         }
                     }
                 }) {
@@ -92,7 +103,9 @@ struct HeaderView: View {
                         .foregroundColor(Color.theme.darkBlue)
                         .rotationEffect(Angle(degrees: rotation))
                         .animation(.spring(duration: 0.3), value: rotation)
+                        .frame(width: 22, height: 22)
                         .padding(8) // Gives a good tap target size
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
             }
@@ -101,8 +114,9 @@ struct HeaderView: View {
             Spacer()
             
             Image(systemName: "person")
-                .font(.system(size: 20))
+                .font(.title3)
                 .padding(8)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .glassEffect(.regular.interactive())
                 .onTapGesture {

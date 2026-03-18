@@ -8,26 +8,41 @@
 import SwiftUI
 import Foundation
 
+enum ScreenType {
+    case searchFeed
+    case pollsFeed
+    case profileFeed
+    case savedFeed
+    case inspectionFeed
+}
 
 struct PollCard: View {
     
     @EnvironmentObject var pollsViewModel: PollsViewModel
+    @EnvironmentObject var profileViewModel: ProfileViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var searchViewModel: SearchViewModel
     @EnvironmentObject var feedStore: FeedStore
+    @EnvironmentObject var inspectionViewModel: InspectionViewModel
     
+    let screenType: ScreenType
     let poll: PollModel
     let options: [PollOption]
     @State var optionChose: String = ""
-    @State var optionsVotes: [Int] = []
+    @State var optionsVotes: [String:Int] = [:]
     @State var totalVotes: Int = 0
+    @State var linkedPostDeleted: Bool = false
     
     @Binding var selectedPost: PostModel?
     @Binding var showPostView: Bool
+    @Binding var showPollView: Bool
+    @Binding var showReportView: Bool
+    @Binding var preReportInfo: preReportModel?
     
     @State var showOptionsSheet: Bool = false
     @State var selectedItemForOptions: GenericItem? = nil
+    @State var isUpdating: Bool = false
     
     private let cornerRadius: CGFloat = 24
 
@@ -37,12 +52,12 @@ struct PollCard: View {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LinearGradient(colors: [Color.theme.background.opacity(0.08), Color.theme.background.opacity(0.02)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        .stroke(Color.theme.background.opacity(0.18), lineWidth: 1)
                 )
 
             VStack(alignment: .leading, spacing: 14) {
@@ -61,6 +76,7 @@ struct PollCard: View {
                         .onTapGesture {
                                 selectedItemForOptions = GenericItem.poll(poll)
                                 showOptionsSheet = true
+                                preReportInfo = preReportModel(contentType: .poll, contentId: poll.id, contentAuthorId: poll.authorId, reportAuthorId: profileViewModel.userId)
                         }
                 }
 
@@ -76,12 +92,7 @@ struct PollCard: View {
 
                 // Options list styled like mini cells
                 VStack(spacing: 10) {
-                    ForEach(options.sorted(by: { $0.index < $1.index })) { option in
-
-                        let votePercent: CGFloat =
-                        totalVotes == 0
-                            ? 0
-                            : CGFloat(optionsVotes[option.index]) / CGFloat(totalVotes)
+                    ForEach(options.sorted(by: { $0.index < $1.index }), id: \.id) { option in
 
                         Button {
                             let previousChoice = optionChose
@@ -90,36 +101,59 @@ struct PollCard: View {
                             Task {
                                 do {
                                     if previousChoice == "" {
-                                        try await pollsViewModel.sendVote(
-                                            pollId: poll.id,
-                                            optionId: newChoice
-                                        )
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            optionChose = newChoice
-                                            optionsVotes[option.index] += 1
-                                            totalVotes += 1
+                                        if !isUpdating {
+                                            isUpdating = true
+                                            try await pollsViewModel.sendVote(
+                                                pollId: poll.id,
+                                                optionId: newChoice
+                                            )
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                optionChose = newChoice
+                                            }
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                totalVotes += 1
+                                                optionsVotes[newChoice, default: 0] += 1
+                                            }
+                                            refreshPoll(pollId: poll.id, optionToAdd: option.id, optionToSubtract: "")
                                         }
                                     } else if previousChoice == newChoice {
-                                        try await pollsViewModel.removeVote(
-                                            pollId: poll.id,
-                                            optionId: newChoice
-                                        )
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            optionChose = ""
-                                            optionsVotes[option.index] -= 1
-                                            totalVotes -= 1
+                                        if !isUpdating {
+                                            isUpdating = true
+                                            try await pollsViewModel.removeVote(
+                                                pollId: poll.id,
+                                                optionId: newChoice
+                                            )
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                optionChose = ""
+                                            }
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                totalVotes -= 1
+                                                optionsVotes[newChoice, default: 0] = max(0, optionsVotes[newChoice, default: 0] - 1)
+                                            }
+                                            refreshPoll(pollId: poll.id, optionToAdd: "", optionToSubtract: option.id)
                                         }
                                     } else {
-                                        try await pollsViewModel.switchVote(
-                                            pollId: poll.id,
-                                            oldOptionId: previousChoice,
-                                            newOptionId: newChoice
-                                        )
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            if let index = options.firstIndex(where: { $0.id == previousChoice }) {
-                                                optionChose = newChoice
-                                                optionsVotes[option.index] += 1
-                                                optionsVotes[index] -= 1
+                                        if !isUpdating {
+                                            isUpdating = true
+                                            try await pollsViewModel.switchVote(
+                                                pollId: poll.id,
+                                                oldOptionId: previousChoice,
+                                                newOptionId: newChoice
+                                            )
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                if let index = options.firstIndex(where: { $0.id == previousChoice }) {
+                                                    optionChose = newChoice
+                                                }
+                                            }
+                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                optionsVotes[previousChoice, default: 0] = max(0, optionsVotes[previousChoice, default: 0] - 1)
+                                                optionsVotes[newChoice, default: 0] += 1
+                                            }
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                if let prev = options.first(where: { $0.id == previousChoice }) {
+                                                    optionChose = newChoice
+                                                    refreshPoll(pollId: poll.id, optionToAdd: option.id, optionToSubtract: prev.id)
+                                                }
                                             }
                                         }
                                     }
@@ -132,21 +166,25 @@ struct PollCard: View {
                             }
                         } label: {
                             GeometryReader { geo in
+                                let rawCount: Int = optionsVotes[option.id] ?? option.voteCount
+                                let total: Int = totalVotes
+                                let fraction: CGFloat = total == 0 ? 0 : CGFloat(rawCount) / CGFloat(total)
+                                let width: CGFloat = min(max(geo.size.width * fraction, 0), geo.size.width)
                                 ZStack(alignment: .leading) {
                                     // Track background
                                     RoundedRectangle(cornerRadius: 12)
                                         .fill(Color.primary.opacity(0.05))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(optionChose == option.id ? Color.theme.lightBlue.opacity(0.15) : Color.white.opacity(0.18), lineWidth: 1)
+                                                .stroke(optionChose == option.id ? Color.theme.lightBlue.opacity(0.15) : Color.theme.background.opacity(0.18), lineWidth: 1)
                                         )
 
                                     // Progress fill when there is a selection
                                     if optionChose != "" {
                                         RoundedRectangle(cornerRadius: 12)
                                             .fill(Color.theme.lightBlue.opacity(0.15))
-                                            .frame(width: min(max(geo.size.width * votePercent, 0), geo.size.width))
-                                            .animation(.easeInOut(duration: 0.25), value: optionChose)
+                                            .frame(width: width)
+                                            .animation(.easeInOut(duration: 0.25), value: fraction)
                                     }
 
                                     // Content row
@@ -165,9 +203,13 @@ struct PollCard: View {
                                         Spacer()
 
                                         if optionChose != "" {
-                                            let percentText = Int(votePercent * 100)
-                                            Text("\(percentText)%")
+                                            let percentString: String = total == 0
+                                                ? "0%"
+                                                : (Double(rawCount) / Double(total)).formatted(.percent.precision(.fractionLength(0)))
+                                            Text(percentString)
                                                 .font(.footnote.weight(.semibold))
+                                                .contentTransition(.numericText())
+                                                .animation(.easeInOut(duration: 0.25), value: fraction)
                                                 .foregroundStyle(optionChose == option.id ? Color.theme.darkBlue : .secondary)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
@@ -184,6 +226,7 @@ struct PollCard: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .allowsHitTesting(screenType == .inspectionFeed ? false : true)
 
                 // Footer: linked post + secondary info
                     Divider().opacity(0.5)
@@ -195,14 +238,24 @@ struct PollCard: View {
                                     postLinkFunction(post: feedStore.loadedPosts[index])
                                 } else {
                                     Task {
-                                        let post = try await homeViewModel.fetchPost(postId: poll.linkedPostId)
-                                        postLinkFunction(post: post)
+                                        do {
+                                            let post = try await homeViewModel.fetchPost(postId: poll.linkedPostId)
+                                            postLinkFunction(post: post)
+                                        }
+                                        catch {
+                                            linkedPostDeleted = true
+                                        }
                                     }
                                 }
                             } label: {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "arrow.up.right.square")
-                                    Text("View Linked Post")
+                                    if !linkedPostDeleted {
+                                        Image(systemName: "arrow.up.right.square")
+                                        Text("View Linked Post")
+                                    } else {
+                                        Image(systemName: "arrow.up.right.square")
+                                        Text("Post Unavailable")
+                                    }
                                 }
                                 .font(.callout.weight(.semibold))
                                 .foregroundStyle(Color.theme.darkBlue)
@@ -219,7 +272,7 @@ struct PollCard: View {
 
                         HStack(spacing: 6) {
                             Image(systemName: "person.3.fill").font(.footnote)
-                            Text("Total: \(totalVotes)")
+                            Text("Total: \(poll.totalVotes)")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -232,16 +285,29 @@ struct PollCard: View {
             }
             .padding(16)
         }
-        .onAppear {
+        .onChange(of: options.map(\.voteCount)) {
             optionChose = pollsViewModel.getPollChoice(pollId: poll.id)
-            for option in options.sorted(by: { $0.index < $1.index }) {
-                optionsVotes.append(option.voteCount)
+            
+            // Set UI States for animation
+            optionsVotes = [:]
+            for opt in options {
+                optionsVotes[opt.id] = opt.voteCount
             }
             totalVotes = poll.totalVotes
+            isUpdating = false
+        }
+        .onAppear {
+            optionChose = pollsViewModel.getPollChoice(pollId: poll.id)
+            optionsVotes = [:]
+            for opt in options {
+                optionsVotes[opt.id] = opt.voteCount
+            }
+            totalVotes = poll.totalVotes
+            isUpdating = false
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .sheet(isPresented: $showOptionsSheet) {
-            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView)
+            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView, showPollView: $showPollView, showReportSheet: $showReportView, preReportInfo: $preReportInfo, screenType: screenType)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.ultraThickMaterial) // or .regularMaterial
@@ -271,9 +337,29 @@ struct PollCard: View {
         }
         Task {
             postViewModel.commentsIsLoading = true
-            try await postViewModel.fetchComments()
+            try await postViewModel.loadInitialRootComments()
             postViewModel.commentsIsLoading = false
         }
     }
 
+    func refreshPoll(pollId: String, optionToAdd: String, optionToSubtract: String) {
+//        switch screenType {
+//        case .searchFeed:
+//            searchViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+//        case .pollsFeed:
+//            pollsViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+//        case .profileFeed:
+//            profileViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+//        case .savedFeed:
+//            profileViewModel.refreshSavedFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+//        }
+//
+        searchViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+        pollsViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+        profileViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+        profileViewModel.refreshSavedFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+        inspectionViewModel.refreshFeedPoll(pollId: pollId, optionToAdd: optionToAdd, optionToSubtract: optionToSubtract)
+
+    }
+    
 }

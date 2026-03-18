@@ -27,16 +27,14 @@ struct ChangeUserName: View {
     
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
+            Color.theme.background.ignoresSafeArea()
 //                .onTapGesture {
 //                    UIApplication.shared.endEditing()
 //                }
             
-            VStack(spacing: 0) {
-                VStack {
-                    header
+            VStack {
+                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 20) {
-                        
                         // Current Username (Large)
                         Text("@\(currentUsername)")
                             .font(.title2.weight(.bold))
@@ -85,31 +83,53 @@ struct ChangeUserName: View {
                             ZStack {
                                 if isSubmitting {
                                     ProgressView()
-                                        .tint(Color.theme.white)
+                                        .tint(Color.theme.background)
                                 } else {
                                     Text(canChangeUsername ? "Confirm Username Change" : "Next change available in \(nextChangeText ?? "")")
                                         .font(.headline)
-                                        .foregroundStyle(Color.theme.white)
+                                        .foregroundStyle(Color.theme.background)
                                 }
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 18)
+                            .frame(height: 44)
                             .glassEffect(.regular.tint(Color.theme.darkBlue), in: .rect(cornerRadius: 22))
                         }
                         .disabled(newUsername.isEmpty || isSubmitting || newUsername == currentUsername || !canChangeUsername)
                         .opacity(newUsername.isEmpty || !canChangeUsername || newUsername == currentUsername ? 0.5 : 1)
                         
-                        Spacer()
+                        Spacer(minLength: 0)
                     }
                     .padding(.horizontal)
+                    .padding(.top, 72)
+                    .padding(.bottom, 100)
                 }
-            }
-            .gesture(
-                DragGesture()
-                    .onEnded { _ in
-                        UIApplication.shared.endEditing()
+                .onScrollPhaseChange({ oldPhase, newPhase in
+                    if newPhase == .interacting {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            UIApplication.shared.endEditing()
+                        }
                     }
-            )
+                })
+            }
+            
+            // Header overlay with blur, pinned to top
+            VStack {
+                ZStack(alignment: .top) {
+                    VStack {
+                        BackgroundHelper.shared.appleHeaderBlur.frame(height: 92)
+                        Spacer()
+                    }
+                    VStack {
+                        header
+                            .frame(height: 55)
+                            .zIndex(1)
+                        Spacer()
+                    }
+                }
+                Spacer()
+            }
         }
         .onAppear {
             Task {
@@ -168,7 +188,6 @@ struct ChangeUserName: View {
             .padding(.bottom, 8)
         }
         .frame(height: 55)
-        .background(Color.white)
     }
     
     // MARK: - Submit Logic

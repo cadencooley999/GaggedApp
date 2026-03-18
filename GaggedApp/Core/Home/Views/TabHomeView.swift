@@ -11,17 +11,8 @@ struct CustomTabBarView: View {
     let tabs: [TabBarItem]
     @Binding var selectedTab: TabBarItem
     @Binding var showAddPostView: Bool
-    @Binding var showPostView: Bool
-    @Binding var hideTabBar: Bool
-    @Binding var showSearchView: Bool
-    @Binding var showEventView: Bool
-    @Binding var showEventSearchView: Bool
-    @Binding var selectedPost: PostModel?
-    @Binding var showSettingsView: Bool
-    @Binding var showProfileView: Bool
-    @Binding var searchViewFocused: Bool
-    @Binding var showCityPicker: Bool
-    @Binding var showSearchBar: Bool
+    
+    @EnvironmentObject var addPostViewModel: AddPostViewModel
     
     @State var animatedSelection: TabBarItem
     
@@ -39,6 +30,7 @@ struct CustomTabBarView: View {
                     .onTapGesture {
                         withAnimation(.spring(duration: 0.3)) {
                             showAddPostView = true
+                            addPostViewModel.currentNewContent = selectedTab.title == "Polls" ? NewContent.poll : NewContent.post
                         }
                     }
                 HStack {
@@ -50,7 +42,7 @@ struct CustomTabBarView: View {
                                     .frame(width: 70, height: 45)
                                     .overlay(
                                         Capsule()
-                                            .stroke(Color.white.opacity(0.25), lineWidth: 0.5)
+                                            .stroke(Color.theme.background.opacity(0.25), lineWidth: 0.5)
                                     )
                                     .matchedGeometryEffect(id: 1, in: selectionPill)
                                     .shadow(color: Color.black.opacity(0.08), radius: 6, y: 3)
@@ -159,7 +151,7 @@ struct CustomTabBarContainerView<Content: View>: View {
                     Spacer()
                     HStack {
                         Spacer()
-                        CustomTabBarView(tabs: tabs, selectedTab: $selectedTab, showAddPostView: $showAddPostView, showPostView: $showPostView, hideTabBar: $hideTabBar, showSearchView: $showSearchView, showEventView: $showEventView, showEventSearchView: $showEventSearchView, selectedPost: $selectedPost, showSettingsView: $showSettingsView, showProfileView: $showProfileView, searchViewFocused: $searchViewFocused, showCityPicker: $showCityPicker, showSearchBar: $showSearchBar, animatedSelection: selectedTab)
+                        CustomTabBarView(tabs: tabs, selectedTab: $selectedTab, showAddPostView: $showAddPostView, animatedSelection: TabBarItem(iconName: "HomeIcon", title: "Home"))
                             .opacity(hideTabBar ? 0 : 1)
                         Spacer()
                     }
@@ -182,6 +174,9 @@ struct TabHomeView: View {
     
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var windowSize: WindowSize
+    @EnvironmentObject var postViewModel: PostViewModel
+    @EnvironmentObject var pollsViewModel: PollsViewModel
+    
 
     @State private var selectedTab: TabBarItem = TabBarItem(iconName: "HomeIcon", title: "Home")
     @State var hideTabBar: Bool = false
@@ -195,9 +190,14 @@ struct TabHomeView: View {
     @State var showCityPicker: Bool = false
     @State var searchViewFocused: Bool = false
     @State var showSearchBar: Bool = false
+    @State var showPollView: Bool = false
+    @State var showReportView: Bool = false
+    @State var preReportInfo: preReportModel? = nil
+    @State var showInspectionView: Bool = false
     
     @Namespace private var postAnimation
     @State private var selectedPost: PostModel?
+    @State private var selectedPoll: PollWithOptions?
 
     var body: some View {
         ZStack {
@@ -213,7 +213,7 @@ struct TabHomeView: View {
             .overlay(
                 LinearGradient(
                     colors: [
-                        .white.opacity(0.06),
+                        Color.theme.background.opacity(0.06),
                         .clear
                     ],
                     startPoint: .top,
@@ -227,13 +227,13 @@ struct TabHomeView: View {
                         HomeView(hideTabBar: $hideTabBar, showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab, postAnimation: postAnimation)
                             .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .tag(allTabs[0])
-                        PollsView(selectedTab: $selectedTab, hideTabBar: $hideTabBar, selectedPost: $selectedPost, showPostView: $showPostView)
+                        PollsView(selectedTab: $selectedTab, hideTabBar: $hideTabBar, selectedPost: $selectedPost, showPostView: $showPostView, selectedPoll: $selectedPoll, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
                             .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .tag(allTabs[1])
                         LeaderView(showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab)
                             .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .tag(allTabs[2])
-                        OneSearch(hideTabBar: $hideTabBar, selectedTab: $selectedTab, showPostView: $showPostView, showEventView: $showEventView, selectedPost: $selectedPost, searchViewFocused: $searchViewFocused, showSearchBar: $showSearchBar)
+                        OneSearch(hideTabBar: $hideTabBar, selectedTab: $selectedTab, showPostView: $showPostView, showEventView: $showEventView, selectedPost: $selectedPost, searchViewFocused: $searchViewFocused, showSearchBar: $showSearchBar, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
 //                            .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                             .tag(allTabs[3])
@@ -243,29 +243,159 @@ struct TabHomeView: View {
                     .ignoresSafeArea()
                 }
                 .sheet(isPresented: $showCityPicker) {
-                    CityPickerView(dissmissable: true, showCityPickerView: $showCityPicker)
+                    CityPickerView(dissmissable: true, showCityPickerView: $showCityPicker, selectedTab: $selectedTab)
+                }
+                .fullScreenCover(isPresented: $showReportView) {
+                    ReportSheetView(showReportSheet: $showReportView, preReportInfo: $preReportInfo)
                 }
             }
+            if showInspectionView {
+                InspectionView(showInspectionView: $showInspectionView, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
+                    .zIndex(2)
+            }
             if showProfileView {
-                ProfileView(selectedTab: $selectedTab, selectedPost: $selectedPost, showPostView: $showPostView, showEventView: $showEventView, showSettingsView: $showSettingsView, showProfileView: $showProfileView)
+                ProfileView(selectedTab: $selectedTab, selectedPost: $selectedPost, showPostView: $showPostView, showEventView: $showEventView, showSettingsView: $showSettingsView, showProfileView: $showProfileView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, showInspectionView: $showInspectionView)
                     .zIndex(1)
                     .transition(.move(edge: .trailing))
             }
             if showAddPostView {
-                AddPostView(showAddPostView: $showAddPostView)
-                    .zIndex(3)
+                AddPostView(showAddPostView: $showAddPostView, selectedTab: $selectedTab)
+                    .zIndex(4)
                     .transition(.move(edge: .bottom))
             }
-            if let post = selectedPost, showPostView {
-                PostView(showPostView: $showPostView, showSearchView: $showSearchView, hideTabBar: $hideTabBar, showAddPostView: $showAddPostView)
+
+            // iPad-style popup vs iPhone full-screen
+            Group {
+                if let post = selectedPost, showPostView {
+                    if windowSize.size.width >= 700 { // Treat as iPad/regular width
+                        // Backdrop
+                        Color.black.opacity(0.35)
+                            .ignoresSafeArea()
+                            .transition(.opacity)
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showPostView = false
+                                }
+                            }
+                        // Centered popup container
+                        VStack {
+                            Spacer(minLength: 0)
+                            PostView(
+                                showPostView: $showPostView,
+                                showSearchView: $showSearchView,
+                                hideTabBar: $hideTabBar,
+                                showAddPostView: $showAddPostView,
+                                showPollView: $showPollView,
+                                showProfileView: $showProfileView,
+                                showReportSheet: $showReportView,
+                                preReportInfo: $preReportInfo
+                            )
+                            .frame(maxWidth: min(windowSize.size.width * 0.75, 800),
+                                   maxHeight: min(windowSize.size.height * 0.95, 1000))
+                            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                            .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+                            .padding(.horizontal)
+                            Spacer(minLength: 0)
+                        }
+                        .zIndex(3)
+                    } else {
+                        // iPhone: keep full-screen
+                        PostView(
+                            showPostView: $showPostView,
+                            showSearchView: $showSearchView,
+                            hideTabBar: $hideTabBar,
+                            showAddPostView: $showAddPostView,
+                            showPollView: $showPollView,
+                            showProfileView: $showProfileView,
+                            showReportSheet: $showReportView,
+                            preReportInfo: $preReportInfo
+                        )
+                        .zIndex(3)
+                        .opacity(1)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                }
+            }
+
+            if let poll = selectedPoll, showPollView {
+                PollView(showPollView: $showPollView, showPostView: $showPostView, selectedPoll: $selectedPoll, showReportView: $showReportView, preReportInfo: $preReportInfo, selectedPost: $selectedPost)
                     .zIndex(2)
-                    .opacity(1)
             }
             if showSettingsView {
-                SettingsView(showSettingsView: $showSettingsView)
+                SettingsView(selectedTab: $selectedTab, showSettingsView: $showSettingsView)
                     .zIndex(4)
                     .transition(.move(edge: .trailing))
             }
+        }
+        .onAppear {
+            NotificationManager.shared.requestPermissionIfNeeded()
+        }
+        .onOpenURL(perform: { url in
+            handle(url)
+        })
+    }
+    
+    func handle(_ url: URL) {
+        print("handling url: ", url)
+        
+        let components = url.pathComponents
+        
+        let type: String
+        let id: String
+        
+        if url.scheme == "https" || url.scheme == "http" {
+            // Web link
+            guard components.count >= 3 else { return }
+            type = components[1] // post / poll
+            id = components[2]   // actual id
+        } else {
+            // Custom scheme link
+            print(components)
+            guard components.count >= 2 else { return }
+            type = url.host() ?? ""// post / poll
+            id = components[1]   // actual id
+        }
+        
+        print("type:", type, "id:", id)
+        
+        switch type {
+        case "post":
+            Task {
+                try await navigateToPost(id)
+            }
+        case "poll":
+            Task {
+                try await navigateToPoll(id)
+            }
+        default:
+            break
+        }
+    }
+    
+    func navigateToPost(_ id: String) async throws {
+        print("navigating to: ", id)
+        selectedTab = TabBarItem(iconName: "HomeIcon", title: "Home")
+        let post = try await postViewModel.fetchPost(postId: id)
+        selectedPost = post
+        postViewModel.setPost(postSelection: post)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showPostView = true
+        }
+        Task {
+            postViewModel.commentsIsLoading = true
+            try await postViewModel.loadInitialRootComments()
+            postViewModel.commentsIsLoading = false
+        }
+    }
+    
+    func navigateToPoll(_ id: String) async throws {
+        print("navigating to: ", id)
+        selectedTab = TabBarItem(iconName: "PollIcon", title: "Polls")
+        let poll = try await pollsViewModel.fetchPoll(id: id)
+        selectedPoll = poll
+        pollsViewModel.poll = poll
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showPollView = true
         }
     }
     

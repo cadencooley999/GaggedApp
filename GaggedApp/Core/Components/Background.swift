@@ -22,7 +22,7 @@ struct Background: View {
         .overlay(
             LinearGradient(
                 colors: [
-                    .white.opacity(0.06),
+                    Color.theme.background.opacity(0.06),
                     .clear
                 ],
                 startPoint: .top,

@@ -175,11 +175,38 @@ class CoreDataManager {
         }
     }
     
-    func getUpvotedPosts() -> [VotedPost] {
-        let request = NSFetchRequest<VotedPost>(entityName: "VotedPost")
-        request.predicate = NSPredicate(format: "isUpvoted == YES")
+    func fetchUpvotedPostIds(
+        pageSize: Int,
+        cursor: Date?
+    ) -> ([String], Date?) {
+        let context = container.newBackgroundContext()
+        let request: NSFetchRequest<VotedPost> = VotedPost.fetchRequest()
+        request.predicate = NSPredicate(format: "isUpvoted == true")
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "votedAt", ascending: false)
+        ]
+        request.fetchLimit = pageSize + 1
 
-        return (try? container.viewContext.fetch(request)) ?? []
+        if let cursor {
+            request.predicate = NSPredicate(
+                format: "votedAt < %@",
+                cursor as NSDate
+            )
+        }
+        
+        var ids: [String] = []
+        var nextCursor: Date? = nil
+
+        do {
+            let results = try context.fetch(request)
+            let pagedResults = results.prefix(pageSize)
+            ids = pagedResults.compactMap(\.id)
+            nextCursor = results.last?.votedAt
+        } catch {
+            print("error with core data voted request")
+        }
+        
+        return (ids, nextCursor)
     }
         
     func saveVotedPost(id: String, isUpvoted: Bool) {
@@ -197,6 +224,7 @@ class CoreDataManager {
                 let newVote = VotedPost(context: context)
                 newVote.id = id
                 newVote.isUpvoted = isUpvoted
+                newVote.votedAt = Date()
             }
             
             do { try context.save() }

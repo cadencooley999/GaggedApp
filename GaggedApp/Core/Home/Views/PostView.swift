@@ -11,6 +11,7 @@ import Kingfisher
 struct PostView: View {
     
     @AppStorage("userId") var userId = ""
+    @AppStorage("isAdmin") var isAdmin = false
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress: String = ""
     @AppStorage("username") var username = ""
     
@@ -30,12 +31,18 @@ struct PostView: View {
     @Binding var showSearchView: Bool
     @Binding var hideTabBar: Bool
     @Binding var showAddPostView: Bool
+    @Binding var showPollView: Bool
+    @Binding var showProfileView: Bool
+    @Binding var showReportSheet: Bool
+    @Binding var preReportInfo: preReportModel?
     
     @State var commentText: String = ""
     @State var shiftScroll: Bool = false
     @State private var textEditorHeight: CGFloat = 36
     @State var parentId: String? = nil
     @State var parentAuthorName: String? = nil
+    @State var parentAuthorId: String? = nil
+    @State var ancestorCommentId: String? = nil
     @State var highlightedCommentId: String? = nil
     @State var showOptionsSheet: Bool = false
     @State var selectedItemForOptions: GenericItem? = nil
@@ -44,29 +51,28 @@ struct PostView: View {
     @State var thingHeldId: String = ""
     @State var isNamePressed: Bool = false
     @State var isCommentTextFieldFocusedState: Bool = false
+    @State var voteInFlight: Bool = false
     
     @Namespace var commentBubbles
     
     var body: some View {
         ZStack {
-            Background()
-                .frame(width: windowSize.size.width, height: windowSize.size.height)
-                .onTapGesture {
-                    UIApplication.shared.endEditing()
-                }
+            Color.theme.background.ignoresSafeArea()
             
             if let post = postViewModel.post {
                 ScrollViewReader { proxy in
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
                             VStack(spacing: -12){
-                                postImage(url: post.imageUrl, maxHeight: 450)
-                                    .cornerRadius(30)
-                                    .padding(.horizontal)
-                                    .padding(.top, 12)
-                                    .onTapGesture {
-                                        UIApplication.shared.endEditing()
-                                    }
+                                ZStack {
+                                    postImage(url: post.imageUrl, maxHeight: 400)
+                                        .cornerRadius(30)
+                                        .padding(.horizontal)
+                                        .padding(.top, 12)
+                                        .onTapGesture {
+                                            UIApplication.shared.endEditing()
+                                        }
+                                }
                                 
                                 postInfo(for: post)
                                     .padding(.horizontal)
@@ -82,7 +88,7 @@ struct PostView: View {
                             
                             commentSection
                                 .id("commentSectionBottom")
-                                .padding(.bottom, 32)
+                                .padding(.bottom, 56)
                                 .padding()
                             
                         }
@@ -90,7 +96,8 @@ struct PostView: View {
                     }
                     .refreshable {
                         Task {
-                            try await postViewModel.refreshComments()
+                            CommentsCache.shared.clearPost(postId: post.id)
+                            try await postViewModel.loadInitialRootComments()
                         }
                     }
                     .onScrollPhaseChange { oldPhase, newPhase in
@@ -100,11 +107,19 @@ struct PostView: View {
                     }
                     .onChange(of: highlightedCommentId) {
                         if let id = highlightedCommentId {
-                            print(id)
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo("scrollId-\(id)", anchor: .center)
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                proxy.scrollTo("\(id)", anchor: .center)
                             }
                             print("Scrolling too")
+                        }
+                    }
+                    .onChange(of: isCommentTextFieldFocused) {
+                        if highlightedCommentId == nil {
+                            if isCommentTextFieldFocused == true {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo("postTop", anchor: .center)
+                                }
+                            }
                         }
                     }
                 }
@@ -114,8 +129,8 @@ struct PostView: View {
                             if value.translation.width > 80 { // left swipe
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     showPostView = false
+                                    postViewModel.rootComments = []
                                 }
-                                postViewModel.comments = []
                             }
                         }
                 )
@@ -138,8 +153,9 @@ struct PostView: View {
                     // Full-screen background that aligns the gradient to the bottom
                     VStack {
                         Spacer()
-                        BackgroundHelper.shared.appleFooterBlur.frame(height: 100)
+                        BackgroundHelper.shared.appleFooterBlur.frame(height: 110)
                     }
+                    .ignoresSafeArea()
                     VStack {
                         Spacer()
                         commentBar
@@ -150,7 +166,7 @@ struct PostView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: showProfilePopup)
         .sheet(isPresented: $showOptionsSheet) {
-            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView)
+            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView, showPollView: $showPollView,  showReportSheet: $showReportSheet, preReportInfo: $preReportInfo, screenType: .pollsFeed)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.ultraThickMaterial) // or .regularMaterial
@@ -160,77 +176,82 @@ struct PostView: View {
     
     var header: some View {
         VStack(spacing: 0){
-            HStack {
-                Image(systemName: "chevron.left")
-                    .font(.title3)
-                    .padding(8)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-                    .glassEffect(.regular.interactive())
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            UIApplication.shared.endEditing()
-                            showPostView = false
-                            hideTabBar = false
-                            postViewModel.comments = []
+            HStack(spacing: 4) {
+                // Left column: fixed width matching the right-side width
+                HStack {
+                    Image(systemName: "chevron.left")
+                        .font(.title3)
+                        .padding(8)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .glassEffect(.regular.interactive())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                UIApplication.shared.endEditing()
+                                showPostView = false
+                                hideTabBar = false
+                                postViewModel.rootComments = []
+                            }
                         }
+                    Spacer(minLength: 0)
+                }
+                .frame(width: 98)
 
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Center column: truly centered content
                 VStack {
                     Text(postViewModel.post?.name ?? "Name")
                         .font(.title3)
                         .fontWeight(.semibold)
                         .foregroundStyle(Color.theme.accent)
-                    HStack(spacing: 4) {
-                        ForEach(postViewModel.postCities) { city in
-                            Text(city.city + ", " + city.state_id.uppercased())
-                                .italic(true)
-                                .font(.caption2)
-                                .lineLimit(1)
-                                .foregroundStyle(Color.theme.gray)
-                            if postViewModel.postCities.count > 1 {
-                                if city == postViewModel.postCities.first! {
-                                    Text("&")
-                                        .italic(true)
-                                        .font(.caption2)
-                                        .foregroundStyle(Color.theme.gray)
-                                }
-                            }
+                    Text(postViewModel.postCities.enumerated().map { index, city in
+                        let part = "\(city.city), \(city.state_id.uppercased())"
+                        if postViewModel.postCities.count > 1 && index == 0 {
+                            return part + " &"
+                        } else {
+                            return part
                         }
-                    }
+                    }.joined(separator: " "))
+                    .italic(true)
+                    .font(.caption2)
+                    .foregroundStyle(Color.theme.trashcanGray)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
+                    .layoutPriority(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                GlassEffectContainer {
-                    HStack {
-                        Image(systemName: "chart.bar.horizontal.page")
-                            .font(.title3)
-                            .padding(8)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                            .glassEffect(.regular.interactive())
-                            .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showAddPostView = true
-                                    addPostViewModel.currentNewContent = .poll
-                                    addPostViewModel.linkedPost = postViewModel.post
-                                }
+
+                // Right column: fixed width matching the left-side width
+                HStack {
+                    Spacer(minLength: 0)
+                    Image(systemName: "chart.bar.horizontal.page")
+                        .font(.title3)
+                        .padding(8)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .glassEffect(.regular.interactive())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showAddPostView = true
+                                addPostViewModel.currentNewContent = .poll
+                                addPostViewModel.linkedPost = postViewModel.post
                             }
-                        Image(systemName: "ellipsis")
-                            .font(.title3)
-                            .padding(8)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                            .glassEffect(.regular.interactive())
-                            .onTapGesture {
-                                if let post = postViewModel.post {
-                                    selectedItemForOptions = GenericItem.post(post)
-                                    showOptionsSheet = true
-                                }
+                        }
+                    Image(systemName: "ellipsis")
+                        .font(.title3)
+                        .padding(8)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .glassEffect(.regular.interactive())
+                        .onTapGesture {
+                            if let post = postViewModel.post {
+                                selectedItemForOptions = GenericItem.post(post)
+                                showOptionsSheet = true
+                                preReportInfo = preReportModel(contentType: .post, contentId: post.id, contentAuthorId: post.authorId, reportAuthorId: userId)
                             }
-                    }
+                        }
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(width: 98)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal)
@@ -239,163 +260,192 @@ struct PostView: View {
         }
     }
     
-    var commentSection: some View {
-        LazyVStack(spacing: 0) {
-            if postViewModel.commentsIsLoading {
-                ProgressView()
-                    .padding(.top, 32)
-            }
-            else {
-                if postViewModel.comments.count == 0 {
-                    Text("No comments yet")
-                        .padding(.top, 32)
-                        .foregroundColor(.gray)
-                        .font(.caption)
-                }
-                else {
-                    GlassEffectContainer {
-                        ForEach(postViewModel.comments, id: \.id) { com in
-                            let topPadding: CGFloat = com.comment.parentCommentId.isEmpty ? 16 : -16
-                            LazyVStack {
-                                HStack(alignment: .top) {
-                                    HStack(alignment: .top){
-                                        if !(com.comment.parentCommentId == "") {
-                                            Rectangle()
-                                                .fill(Color.theme.gray.opacity(0.5))
-                                                .frame(width: 20, height: 2)
-                                                .padding(.horizontal, 8)
-                                                .padding(.top, 12)
-                                                .cornerRadius(5)
-                                        }
-                                        ProfilePic(address: com.comment.authorId == userId ? chosenProfileImageAddress : com.comment.authorProfPic, size: 25)
-                                            .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
-                                            .onLongPressGesture {
-                                                profileTask?.cancel()
-                                                
-                                                profileTask = Task {
-                                                    async let skeletonDelay: Void = {
-                                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                                        await MainActor.run { showProfilePopup = true }
-                                                    }()
-                                                    let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
-                                                    await MainActor.run {
-                                                        withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
-                                                    }
-                                                }
-                                            }
-                                        
-                                        VStack(alignment: .leading){
-                                            HStack {
-                                                Text(com.comment.authorId == userId ? username : com.comment.authorName)
-                                                    .font(.caption)
-                                                    .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
-                                                    .onLongPressGesture {
-                                                        profileTask?.cancel()
-                                                        profileTask = Task {
-                                                            async let skeletonDelay: Void = {
-                                                                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                                                await MainActor.run { showProfilePopup = true }
-                                                            }()
-                                                            let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
-                                                            await MainActor.run {
-                                                                withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
-                                                            }
-                                                        }
-                                                    }
-                                                
-                                                Text(postViewModel.timeAgoString(from: com.comment.createdAt))
-                                                    .font(.caption)
-                                                    .foregroundStyle(Color.theme.gray)
-                                            }
-                                            .padding(.bottom, 4)
-                                            (Text(com.isGrandchild
-                                                  ? "@\(postViewModel.getAuthorName(id: com.comment.parentCommentId) ?? "") "
-                                                  : "").foregroundStyle(Color.blue).font(.subheadline))
-                                            + Text(com.comment.message)
-                                                .font(.subheadline)
-                                                .foregroundStyle(Color.theme.accent)
-                                            HStack {
-                                                Image(systemName: "message")
-                                                    .resizable()
-                                                    .frame(width: 12, height: 12)
-                                                    .foregroundStyle(Color.theme.accent)
-                                                    .onTapGesture {
-                                                        parentId = com.id
-                                                        parentAuthorName = com.comment.authorName
-                                                        highlightedCommentId = nil
-                                                        isCommentTextFieldFocused = true
-                                                        highlightedCommentId = com.id
-                                                    }
-                                                    .padding(.trailing, 8)
-                                                Image(systemName: "flag")
-                                                    .resizable()
-                                                    .frame(width: 12, height: 12)
-                                                    .foregroundStyle(Color.theme.accent)
-                                                    .onTapGesture { }
-                                                    .padding(.trailing, 8)
-                                                if com.comment.authorId == profileViewModel.userId {
-                                                    Image("ellipses")
-                                                        .resizable()
-                                                        .frame(width: 12, height: 12)
-                                                        .foregroundColor(Color.theme.accent)
-                                                        .onTapGesture {
-                                                            selectedItemForOptions = GenericItem.comment(com.comment)
-                                                            showOptionsSheet = true
-                                                        }
-                                                }
-                                                Spacer()
-                                            }
-                                            .padding(.top, 4)
-                                        }
-                                    }
-                                    Spacer()
-                                    VStack {
-                                        Image(systemName: "arrow.up")
-                                            .foregroundStyle(postViewModel.upvotedComms.contains(com.id) ? Color.theme.darkBlue : .gray)
-                                            .onTapGesture {
-                                                if postViewModel.upvotedComms.contains(com.id) { postViewModel.removeComUpvote(comId: com.id) }
-                                                else { postViewModel.upvoteCom(comId: com.id) }
-                                            }
-                                            .padding(.bottom, 8)
-                                        Text("\(com.comment.upvotes)")
-                                            .font(.caption)
-                                    }
-                                    .padding(.top, 8)
+    @ViewBuilder
+    func commentRow(com: viewCommentModel, ancestorId: String, isRoot: Bool) -> some View  {
+        LazyVStack {
+            HStack(alignment: .top) {
+                HStack(alignment: .top){
+                    ProfilePic(address: com.comment.authorId == userId ? chosenProfileImageAddress : com.comment.authorProfPic, size: 25)
+                        .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
+//                        .onLongPressGesture {
+//                            profileTask?.cancel()
+//
+//                            profileTask = Task {
+//                                async let skeletonDelay: Void = {
+//                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+//                                    await MainActor.run { showProfilePopup = true }
+//                                }()
+//                                let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
+//                                await MainActor.run {
+//                                    withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
+//                                }
+//                            }
+//                        }
+
+                    VStack(alignment: .leading){
+                        HStack {
+                            Text(com.comment.authorId == userId ? username : com.comment.authorName)
+                                .font(.caption)
+                                .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
+//                                .onLongPressGesture {
+//                                    profileTask?.cancel()
+//                                    profileTask = Task {
+//                                        async let skeletonDelay: Void = {
+//                                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+//                                            await MainActor.run { showProfilePopup = true }
+//                                        }()
+//                                        let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
+//                                        await MainActor.run {
+//                                            withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
+//                                        }
+//                                    }
+//                                }
+
+                            Text(postViewModel.timeAgoString(from: com.comment.createdAt))
+                                .font(.caption)
+                                .foregroundStyle(Color.theme.gray)
+                        }
+                        .padding(.bottom, 4)
+                        (Text(com.comment.isGrand
+                              ? "@\(com.comment.parentAuthorName) "
+                              : "").foregroundStyle(Color.blue).font(.subheadline))
+                        + Text(com.comment.message)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.theme.accent)
+                        HStack {
+                            Image(systemName: "message")
+                                .resizable()
+                                .frame(width: 12, height: 12)
+                                .foregroundStyle(Color.theme.accent)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    parentId = com.id
+                                    parentAuthorName = com.comment.authorName
+                                    parentAuthorId = com.comment.authorId
+                                    isCommentTextFieldFocused = true
+                                    ancestorCommentId = ancestorId
+                                    highlightedCommentId = com.id
                                 }
-                                .padding(12)
-                                if com.comment.hasChildren && com.isExpanded == false && com.comment.parentCommentId == "" {
-                                    HStack {
-                                        Rectangle()
-                                            .fill(Color.theme.gray)
-                                            .frame(width: 20, height: 0.5)
-                                        Text("View Replies")
-                                            .font(.caption)
-                                            .foregroundStyle(Color.theme.gray)
-                                        Rectangle()
-                                            .fill(Color.theme.gray)
-                                            .frame(width: 20, height: 0.5)
-                                    }
+                                .padding(.trailing, 8)
+                            Image(systemName: "flag")
+                                .resizable()
+                                .frame(width: 12, height: 12)
+                                .foregroundStyle(Color.theme.accent)
+                                .padding(.trailing, 8)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    preReportInfo = preReportModel(contentType: .comment, contentId: com.comment.id, contentAuthorId: com.comment.authorId, reportAuthorId: userId)
+                                    showReportSheet = true
+                                }
+                            if com.comment.authorId == profileViewModel.userId || isAdmin {
+                                Image("ellipses")
+                                    .resizable()
+                                    .frame(width: 12, height: 12)
+                                    .foregroundColor(Color.theme.accent)
+                                    .contentShape(Rectangle())
                                     .onTapGesture {
-                                        Task { try await postViewModel.catchChildren(viewCom: com) }
+                                        selectedItemForOptions = GenericItem.comment(com.comment)
+                                        showOptionsSheet = true
+                                        preReportInfo = preReportModel(contentType: .comment, contentId: com.id, contentAuthorId: com.comment.authorId, reportAuthorId: userId)
                                     }
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                    .padding(.bottom, 8)
+                            }
+                            Spacer()
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+                Spacer()
+                VStack {
+                    Image(systemName: "arrow.up")
+                        .foregroundStyle(postViewModel.upvotedComms.contains(com.id) ? Color.theme.darkBlue : .gray)
+                        .frame(width: 12, height: 12)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if postViewModel.upvotedComms.contains(com.id) { postViewModel.removeComUpvote(comId: com.id, ancestorId: ancestorId, isRoot: isRoot) }
+                            else { postViewModel.upvoteCom(comId: com.id, ancestorId: ancestorId, isRoot: isRoot) }
+                        }
+                        .padding(.bottom, 8)
+                    Text("\(com.comment.upvotes)")
+                        .font(.caption)
+                        .contentTransition(.numericText())
+                }
+                .padding(.top, 8)
+            }
+            .padding(12)
+        }
+    }
+    
+    var commentSection: some View {
+        LazyVStack {
+            ForEach(postViewModel.rootComments, id: \.comment.id) { parent in
+                LazyVStack {
+                    commentRow(com: parent, ancestorId: parent.id, isRoot: true)
+                    if parent.comment.hasChildren {
+                        if let threadState = parent.commentThreadState {
+                            if threadState.isExpanded == true {
+                                ForEach(threadState.children) { child in
+                                    HStack(alignment: .top){
+                                        Rectangle()
+                                            .frame(width: 20, height: 1)
+                                            .padding(.top)
+                                        commentRow(com: child, ancestorId: parent.id, isRoot: false)
+                                            .id(child.id)
+                                    }
+                                    .padding(.leading, 4)
                                 }
                             }
-                            .padding(8)
-                            .glassEffect(in: .rect(cornerRadius: 30))
-                            .glassEffectUnion(id: "thread-\(postViewModel.findGrandparent(comment: com))", namespace: commentBubbles)
-                            .transaction { $0.animation = nil }
-                            .compositingGroup()
-                            .shadow(color: .black.opacity(0.08), radius: 6, y: 4)
-                            .padding(.top, topPadding)
-                            .id("scrollId-\(com.id)")
-                        } // foreach
-                    }// Glasseffect
-                } // else
-            } // else
-        } // vstack
-    } // sect
+                        }
+                    }
+                    if (parent.commentThreadState?.isExpanded == false) || parent.commentThreadState?.hasMore == true || (parent.comment.hasChildren && parent.commentThreadState?.children.isEmpty == true)  {
+                        HStack {
+                            Rectangle()
+                                .fill(Color.theme.gray)
+                                .frame(width: 14, height: 0.5)
+                            Text("View Replies")
+                                .font(.caption)
+                                .foregroundStyle(Color.theme.gray)
+                            Rectangle()
+                                .fill(Color.theme.gray)
+                                .frame(width: 20, height: 0.5)
+                        }
+                        .onTapGesture {
+                            Task {
+                                try await postViewModel.fetchChildren(rootComment: parent)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.bottom, 8)
+                    }
+
+                }
+                .padding(8)
+                .glassEffect(in: .rect(cornerRadius: 30))
+//                .glassEffectUnion(id: "thread-\(postViewModel.findGrandparent(comment: com))", namespace: commentBubbles)
+                .shadow(color: .black.opacity(0.08), radius: 6, y: 4)
+                .padding(.top, 16)
+                .transition(.opacity)
+                .onAppear {
+                    if parent.id == postViewModel.rootComments.last?.id && postViewModel.hasMoreComments == true {
+                        Task {
+                            print("has more?")
+                            try await postViewModel.fetchRootComments()
+                        }
+                    }
+                }
+                .id(parent.id)
+            }
+            if postViewModel.commentsIsLoading {
+                ProgressView()
+                    .padding(32)
+            }
+            else if postViewModel.rootComments.count == 0 {
+                Text("No comments yet")
+                    .padding(.top, 32)
+                    .foregroundColor(.gray)
+                    .font(.caption)
+            }
+        }
+    }
     
     var commentBar: some View {
         VStack(spacing: 0) {
@@ -404,6 +454,12 @@ struct PostView: View {
                 VStack {
                     Spacer()
                     ProfilePic(address: chosenProfileImageAddress, size: 44)
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showProfileView = true
+                                showPostView = false
+                            }
+                        }
                 }
                 .padding(.bottom, 2)
                 
@@ -426,8 +482,14 @@ struct PostView: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     self.parentAuthorName = nil
+                                    parentAuthorId = nil
                                     parentId = nil
                                     highlightedCommentId = nil
+                                    parentAuthorId = nil
+                                    ancestorCommentId = nil
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        UIApplication.shared.endEditing()
+                                    }
                                 }
                             Spacer()
                         }
@@ -486,52 +548,110 @@ struct PostView: View {
                 HStack {
                     Text("\(post.upvotes)")
                         .font(.subheadline)
-                    Image(systemName: "arrow.up")
-                        .foregroundStyle(Color.theme.darkBlue)
-                        .font(.title3)
-                        .fontWeight(postViewModel.userUpvoted ? .bold : .regular)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Image(systemName: "arrow.up.circle")
+                        .foregroundStyle(postViewModel.userUpvoted ? Color.theme.darkBlue : Color.theme.lightGray)
+                        .font(.title)
                         .onTapGesture {
-                            if !(postViewModel.userUpvoted || postViewModel.userDownvoted){
-                                // check to see if works
-                                Task {
-                                    try await postViewModel.upvote(post: post)
-                                    homeViewModel.upvotePost(post: post)
-                                }
+                            guard !voteInFlight else { return }
+                            voteInFlight = true
+
+                            // Snapshot
+                            let wasUpvoted = postViewModel.userUpvoted
+                            let wasDownvoted = postViewModel.userDownvoted
+
+                            // Optimistic UI
+                            if !(wasUpvoted || wasDownvoted) {
+                                postViewModel.userUpvoted = true
+                            } else if wasUpvoted {
+                                postViewModel.userUpvoted = false
                             }
-                            else if postViewModel.userUpvoted {
-                                Task {
-                                    try await postViewModel.removeUpvote(post: post)
-                                    homeViewModel.removeUpvote(post: post)
+
+                            Task {
+                                defer { voteInFlight = false }
+
+                                do {
+                                    if !(wasUpvoted || wasDownvoted) {
+                                        try await postViewModel.upvote(post: post)
+                                        homeViewModel.upvotePost(post: post)
+                                    } else if wasUpvoted {
+                                        try await postViewModel.removeUpvote(post: post)
+                                        homeViewModel.removeUpvote(post: post)
+                                    }
+                                } catch {
+                                    // Rollback
+                                    postViewModel.userUpvoted = wasUpvoted
+                                    postViewModel.userDownvoted = wasDownvoted
                                 }
                             }
                         }
+
                 }
+                .animation(.easeInOut(duration: 0.3), value: post.upvotes)
                 HStack {
                     Text("\(post.downvotes)")
                         .font(.subheadline)
-                    Image(systemName: "arrow.down")
-                        .foregroundStyle(Color.theme.brightRed)
-                        .font(.title3)
-                        .fontWeight(postViewModel.userDownvoted ? .bold : .regular)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Image(systemName: "arrow.down.circle")
+                        .foregroundStyle(postViewModel.userDownvoted ? Color.theme.darkRed : Color.theme.lightGray)
+                        .font(.title)
                         .onTapGesture {
-                            if !(postViewModel.userUpvoted || postViewModel.userDownvoted){
-                                Task {
-                                    try await postViewModel.downvote(post: post)
-                                    homeViewModel.downvotePost(post: post)
-                                }
+                            guard !voteInFlight else { return }
+                            voteInFlight = true
+
+                            // Snapshot
+                            let wasUpvoted = postViewModel.userUpvoted
+                            let wasDownvoted = postViewModel.userDownvoted
+
+                            // Optimistic UI
+                            if !(wasUpvoted || wasDownvoted) {
+                                postViewModel.userDownvoted = true
+                            } else if wasDownvoted {
+                                postViewModel.userDownvoted = false
                             }
-                            else if postViewModel.userDownvoted {
-                                Task {
-                                    try await postViewModel.removeDownvote(post: post)
-                                    homeViewModel.removeDownvote(post: post)
+
+                            Task {
+                                defer { voteInFlight = false }
+
+                                do {
+                                    if !(wasUpvoted || wasDownvoted) {
+                                        try await postViewModel.downvote(post: post)
+                                        homeViewModel.downvotePost(post: post)
+                                    } else if wasDownvoted {
+                                        try await postViewModel.removeDownvote(post: post)
+                                        homeViewModel.removeDownvote(post: post)
+                                    }
+                                } catch {
+                                    // Rollback
+                                    postViewModel.userUpvoted = wasUpvoted
+                                    postViewModel.userDownvoted = wasDownvoted
                                 }
                             }
                         }
                 }
+                .animation(.easeInOut(duration: 0.3), value: post.downvotes)
             }// hstack
+            .animation(.easeInOut(duration: 0.3), value: postViewModel.userUpvoted)
+            .animation(.easeInOut(duration: 0.3), value: postViewModel.userDownvoted)
             InlineExpandableText(text: post.text, limit: 200, font: .body)
                 .padding(.top, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            
+            if !post.tags.isEmpty {
+                // Tags grid styled like AddPostView: blue capsules with # prefix
+                let columns = [GridItem(.adaptive(minimum: 80), spacing: 8, alignment: .leading)]
+                VStack {
+                    FlowLayout {
+                        ForEach(post.tags, id: \.self) { tag in
+                            TagPill(title: tag, isSelected: true, color: Color.theme.darkBlue)
+                        }
+                    }
+                }
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             
         }
         .padding()
@@ -542,17 +662,30 @@ struct PostView: View {
     
     func submitComment() {
         if commentText != "" {
+            print("submitting with parent comment author: ", parentAuthorId as Any)
+            var tempText = commentText
+            var tempAuthorName = parentAuthorName
             withAnimation(.easeInOut(duration: 0.2)) {
                 isCommentTextFieldFocused = false
                 UIApplication.shared.endEditing()
                 parentAuthorName = nil
-            }
-            Task {
-                try await postViewModel.uploadComment(message: commentText, parentId: parentId)
-                try await postViewModel.fetchComments()
                 commentText = ""
             }
-            
+            Task {
+                print("uploading from post")
+                try await postViewModel.uploadComment(message: tempText, parentId: parentId, parentAuthorId: parentAuthorId, parentAuthorName: tempAuthorName, ancestorId: ancestorCommentId)
+                parentAuthorId = nil
+                ancestorCommentId = nil
+                parentId = nil
+            }
         }
     }
+    
+    func setParentStates(parentId: String?, parentAuthorId: String?, parentAuthorName: String?, ancestorCommentId: String?) {
+        self.parentId = parentId
+        self.parentAuthorId = parentAuthorId
+        self.parentAuthorName = parentAuthorName
+        self.ancestorCommentId = ancestorCommentId
+    }
 }
+
