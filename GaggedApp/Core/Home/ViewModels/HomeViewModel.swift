@@ -9,20 +9,25 @@ import Foundation
 import SwiftUI
 import FirebaseFirestore
 import Combine
+import FirebaseAuth
 
 @MainActor
 class HomeViewModel: ObservableObject {
     
     let feedStore: FeedStore
     private var ingestedPostIDs = Set<String>()
+    
+    @AppStorage("isLoggedIn") var isLogged = false
 
     @Published var hasLoaded = false
     @Published var allCitiesList: [City] = []
     @Published var citySearchText: String = ""
     @Published var postMatrix: [[PostModel]] = []
-    @Published var columns: Int = 3
+    @Published var columns: Int = 2
     @Published var isLoading: Bool = false
     @Published var hasMore = true
+    @Published var blocked: [String] = []
+    @Published var blockedBy: [String] = []
 
     private var cursor: FeedCursor? = nil
     
@@ -52,7 +57,11 @@ class HomeViewModel: ObservableObject {
             .sink { [weak self] in
                 guard let self else { return }
                 print("feed reload trigger received")
-                self.fetchMorePostsNonAsync(cities: locationManager.citiesInRange)
+                let user = Auth.auth().currentUser
+                if isLogged && (user != nil) {
+                    print("is Logged?")
+                    self.fetchMorePostsNonAsync(cities: locationManager.citiesInRange)
+                }
             }
             .store(in: &cancellables)
     }
@@ -79,6 +88,14 @@ class HomeViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        
+        feedStore.$blocked.sink { [weak self] ids in
+            self?.blocked = Array(ids)
+        }.store(in: &cancellables)
+        
+        feedStore.$blockedBy.sink { [weak self] ids in
+            self?.blockedBy = Array(ids)
+        }.store(in: &cancellables)
         
         // need to make it not reload whole list.
     }
@@ -127,14 +144,19 @@ class HomeViewModel: ObservableObject {
     }
     
     func loadMorePostFeed(cityIds: [String]) async {
-        print(isLoading, hasMore)
         guard !isLoading, hasMore else { return }
         isLoading = true
-        defer {isLoading = false; hasLoaded = true}
+        defer {isLoading = false;
+            if isLogged {hasLoaded = true}}
         do {
+            var citiesInRange = cityIds
             print("CITIES: ", cityIds.prefix(3), cursor)
+            if citiesInRange.count == 0 {
+                citiesInRange = locationManager.citiesInRange
+            }
             let response = try await postManager.fetchHomeFeed(
-                cityIds: cityIds,
+                cityIds: citiesInRange,
+                blockedUserIds: Array(Set(self.blocked + self.blockedBy)),
                 cursor: cursor
             )
             print("TRYING: ", response.posts.prefix(1))

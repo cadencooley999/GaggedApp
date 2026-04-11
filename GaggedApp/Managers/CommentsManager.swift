@@ -72,6 +72,7 @@ class CommentsManager {
     func getUserComments(
         userId: String,
         pageSize: Int = 5,
+        blockedUserIds: [String] = [],
         cursor: CommentsCursor?
     ) async throws -> ([CommentModel], CommentsCursor?) {
 
@@ -100,6 +101,7 @@ class CommentsManager {
         let pageDocs = Array(docs.prefix(pageSize))
 
         let comments = pageDocs.map { mapItem(item: $0) }
+        let filtered = comments.filter { !blockedUserIds.contains($0.authorId) }
 
         let nextCursor: CommentsCursor? = {
             guard hasMore, let last = pageDocs.last else { return nil }
@@ -112,7 +114,7 @@ class CommentsManager {
             )
         }()
 
-        return (comments, nextCursor)
+        return (filtered, nextCursor)
     }
 
     
@@ -124,7 +126,7 @@ class CommentsManager {
         try await ref.delete()
     }
     
-    func getRootComments(postId: String, limit: Int, cursor: CommentsCursor?) async throws -> ([CommentModel], CommentsCursor?){
+    func getRootComments(postId: String, limit: Int, blockedUserIds: [String] = [], cursor: CommentsCursor?) async throws -> ([CommentModel], CommentsCursor?){
         guard !postId.isEmpty else { return ([], nil) }
         
         var comments: [CommentModel] = []
@@ -149,6 +151,7 @@ class CommentsManager {
         let hasMore = newDocs.count > limit
         
         comments = pagedDocs.map {mapItem(item: $0)}
+        let filtered = comments.filter { !blockedUserIds.contains($0.authorId) }
         
         let nextCursor: CommentsCursor? = {
             guard hasMore, let last = pagedDocs.last else { return nil }
@@ -161,10 +164,10 @@ class CommentsManager {
             )
         }()
                         
-        return (comments, nextCursor)
+        return (filtered, nextCursor)
     }
     
-    func fetchChildren(ancestorId: String, limit: Int, cursor: CommentsCursor?) async throws -> ([CommentModel], CommentsCursor?) {
+    func fetchChildren(ancestorId: String, limit: Int, blockedUserIds: [String] = [], cursor: CommentsCursor?) async throws -> ([CommentModel], CommentsCursor?) {
         guard !ancestorId.isEmpty else { return ([], nil)}
         
         var comments: [CommentModel] = []
@@ -188,6 +191,7 @@ class CommentsManager {
         let pageDocs = newDocs.documents.prefix(limit)
         let hasMore = newDocs.count > limit
         comments = pageDocs.map {mapItem(item: $0)}
+        let filtered = comments.filter { !blockedUserIds.contains($0.authorId) }
         
         let nextCursor: CommentsCursor? = {
             guard hasMore, let last = pageDocs.last else { return nil }
@@ -200,7 +204,7 @@ class CommentsManager {
             )
         }()
         
-        return (comments, nextCursor)
+        return (filtered, nextCursor)
     }
     
     func updateToParent(commentId: String) async throws {
@@ -211,7 +215,7 @@ class CommentsManager {
         try await ref.updateData(["hasChildren" : true])
     }
     
-    func getChildComments(postId: String, commentId: String) async throws -> [CommentModel] {
+    func getChildComments(postId: String, commentId: String, blockedUserIds: [String] = []) async throws -> [CommentModel] {
         guard !postId.isEmpty, !commentId.isEmpty else { return [] }
         var comments: [CommentModel] = []
         
@@ -225,7 +229,7 @@ class CommentsManager {
               comments.append(comment)
           }
         
-        return comments
+        return comments.filter { !blockedUserIds.contains($0.authorId) }
     }
     
     func incrementReports(commentId: String) async throws {

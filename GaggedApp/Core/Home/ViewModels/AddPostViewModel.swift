@@ -11,6 +11,10 @@ import PhotosUI
 import FirebaseFirestore
 import Combine
 
+enum AddPostError: Error {
+    case imageUploadFailed
+}
+
 @MainActor
 final class AddPostViewModel: ObservableObject {
     
@@ -86,14 +90,22 @@ final class AddPostViewModel: ObservableObject {
         do {
             let authorId = userId
             let imageId = UUID().uuidString
+            let postRef = Firestore.firestore().collection("Posts").document()
             
-            let imageUrl = try await storageManager.uploadImage(image, imageId: imageId, userId: userId)
+            let post = PostModel(id: "", text: text, name: name, imageUrl: "", createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, tags: selectedTags.map({$0.title}), keywords: [], upvotes: 0, downvotes: 0)
             
-            let post = PostModel(id: "", text: text, name: name, imageUrl: imageUrl, createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, tags: selectedTags.map({$0.title}), keywords: [], upvotes: 0, downvotes: 0)
+            try await postManager.uploadPost(post: post, postRef: postRef)
+            
+            let urlString = try await uploadWithRetries(call: {
+                try await self.storageManager.uploadImage(image, imageId: imageId, userId: self.userId, postId: postRef.documentID)
+            })
+            
+            if let urlString = urlString {
+                try await postManager.finalizePost(postId: postRef.documentID, imageUrl: urlString)
+                print("Post Finalized")
+            }
             print(post.name, "postname")
-            try await postManager.uploadPost(post: post)
             UserManager.shared.addGags(userId: userId, contributionType: .post)
-            try await UserManager.shared.addPostToUser(userId: userId)
             return true
         } catch {
             print("❌ Failed with error: \(error.localizedDescription)")
@@ -117,24 +129,7 @@ final class AddPostViewModel: ObservableObject {
             return false
         }
     }
-    
-    func uploadNewEvent(description: String, name: String, image: UIImage?, rsvps: Int, cityId: String, locationDetails: String, date: Date) async throws -> Bool {
-        do {
-            var imageUrl = ""
-            var imageId = UUID().uuidString
-            if let image = image {
-                imageUrl = try await storageManager.uploadImage(image, imageId: imageId, userId: userId)
-            }
-            let event = EventModel(id: "", name: name, locationDetails: locationDetails, date: date, rsvps: rsvps, imageUrl: imageUrl, description: description, authorId: userId, authorName: username, cityId: cityId, keywords: [])
-            try await eventManager.uploadEvent(event: event)
-            print("Success uploading event")
-            return true
-        } catch {
-            print("Failed with error: \(error.localizedDescription)")
-            return false
-        }
-    }
-    
+        
     private func setImage(selection: PhotosPickerItem?) {
         guard let selection else { return }
         
@@ -146,5 +141,22 @@ final class AddPostViewModel: ObservableObject {
                 }
             }
         }
+    }
+    
+    func uploadWithRetries(retries: Int = 3, delay: Double = 1.0, call: @escaping () async throws -> String) async throws -> String? {
+        
+        var attempt = 0
+        
+        while attempt < retries {
+            do {
+                var url = try await call()
+                return url
+            } catch {
+                attempt += 1
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1000_000_000))
+            }
+        }
+        
+        throw AddPostError.imageUploadFailed
     }
 }

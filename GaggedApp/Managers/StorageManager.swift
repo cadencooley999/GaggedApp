@@ -15,20 +15,20 @@ class StorageManager {
     private var storage: Storage {
         Storage.storage()
     }
-    func uploadImage(_ image: UIImage, imageId: String, userId: String) async throws -> String {
+    func uploadImage(_ image: UIImage, imageId: String, userId: String, postId: String) async throws -> String {
         
         guard let imageData = image.jpegData(compressionQuality: 0.6) else {
             throw NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid image"])
         }
-        let ref = storage.reference().child("images/\(userId)/\(imageId).jpg")
+        let ref = storage.reference().child("images/\(userId)/\(postId)/\(imageId).jpg")
         
         // Upload data
         _ = try await ref.putDataAsync(imageData, metadata: nil)
         
         // Get download URL
         let url = try await ref.downloadURL()
+        
         return url.absoluteString
-
     }
     
     func deleteImage(imageUrl: String) async throws {

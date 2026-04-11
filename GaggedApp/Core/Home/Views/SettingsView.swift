@@ -6,6 +6,7 @@
 //
 import Foundation
 import SwiftUI
+import FirebaseAuth
 
 struct SettingsView: View {
     
@@ -23,6 +24,7 @@ struct SettingsView: View {
     @State var showChangePassword: Bool = false
     @State var showChangeUsername: Bool = false
     @State var showCityNotifPicker: Bool = false
+    @State var showBlockedUsers: Bool = false
 
     var body: some View {
         ZStack {
@@ -34,6 +36,7 @@ struct SettingsView: View {
                     notificationsSection
                     citySection
                     accountSection
+                    privacySection
                     legalSection
                     Spacer(minLength: 40)
                 }
@@ -79,6 +82,12 @@ struct SettingsView: View {
 
             if showChangeUsername {
                 ChangeUserName(showChangeUsername: $showChangeUsername)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
+            
+            if showBlockedUsers {
+                BlockedUsersView(isPresented: $showBlockedUsers)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
@@ -373,6 +382,34 @@ struct SettingsView: View {
         }
     }
     
+    var privacySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Privacy")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(Color.theme.trashcanGray)
+                .padding(.horizontal)
+
+            VStack(spacing: 0) {
+                settingsButtonRow(
+                    icon: "hand.raised",
+                    title: "Blocked Users"
+                ) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showBlockedUsers = true
+                    }
+                }
+            }
+            .background(Rectangle().fill(.ultraThinMaterial))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.theme.lightGray.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
+            .padding(.horizontal)
+        }
+    }
+    
     var legalSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             
@@ -533,6 +570,10 @@ struct deletePopUp: View {
                     // Delete (glassy, emphasized)
                     Button(action: {
                         if !passwordText.isEmpty {
+                            if Auth.auth().currentUser == nil {
+                                print("User not signed in BEFORE delete call")
+                                return
+                            }
                             Task {
                                 let success = try await settingsViewModel.deleteAccount(password: passwordText)
                                 profileViewModel.clearStates()

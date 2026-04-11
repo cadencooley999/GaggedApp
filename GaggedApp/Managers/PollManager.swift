@@ -88,7 +88,7 @@ class PollManager {
         try await pollRef.delete()
     }
     
-    func fetchGlobalPollFeed(pageSize: Int = 15, cursor: PollCursor?) async throws -> ([PollWithOptions], PollCursor?) {
+    func fetchGlobalPollFeed(pageSize: Int = 15, blockedUserIds: [String] = [], cursor: PollCursor?) async throws -> ([PollWithOptions], PollCursor?) {
         var query: Query = pollCollection.order(by: "createdAt").order(by: "id").limit(to: pageSize+1)
         
         print("in fetch global poll feed")
@@ -107,6 +107,7 @@ class PollManager {
         let pageDocs = docs.documents.prefix(pageSize)
         let hasMore = docs.count > pageSize
         let mapped = pageDocs.map {PollWithOptions(id: $0.documentID, poll: mapPoll(document: $0), options: [])}
+        let filtered = mapped.filter { !blockedUserIds.contains($0.poll.authorId) }
         
         let nextCursor: PollCursor? = {
             guard hasMore, let last = pageDocs.last else { return nil }
@@ -119,11 +120,11 @@ class PollManager {
             )
         }()
         
-        return (mapped, nextCursor)
+        return (filtered, nextCursor)
     }
 
     
-    func fetchPolls(cityIds: [String], pageSize: Int = 5, cursor: PollFeedCursor?) async throws -> PollFeedReturn {
+    func fetchPolls(cityIds: [String], pageSize: Int = 5, blockedUserIds: [String] = [], cursor: PollFeedCursor?) async throws -> PollFeedReturn {
         guard !cityIds.isEmpty else { return PollFeedReturn(polls: [], nextCursor: nil) }
         
         var results: [PollWithOptions] = []
@@ -153,11 +154,12 @@ class PollManager {
         }
 
         let polls = decodePolls(from: dict)
+        let visiblePolls = polls.filter { !blockedUserIds.contains($0.authorId) }
         let cursor = dict["nextCursor"] as? [String: Any]
         let nextCursor = decodeCursor(from: dict)
         print("Fetching Polls (chunked)")
         
-        for poll in polls {
+        for poll in visiblePolls {
             let options = try await fetchPollOptions(pollId: poll.id)
             results.append(
                 PollWithOptions(
@@ -283,7 +285,7 @@ class PollManager {
         return PollWithOptions(id: poll.id, poll: poll, options: options)
     }
     
-    func fetchAllPollsNearby(cityIds: [String]) async throws -> [PollWithOptions] {
+    func fetchAllPollsNearby(cityIds: [String], blockedUserIds: [String] = []) async throws -> [PollWithOptions] {
         guard !cityIds.isEmpty else { return [] }
         print("Fetching Polls (chunked)")
 
@@ -315,7 +317,7 @@ class PollManager {
             $0.poll.createdAt.seconds > $1.poll.createdAt.seconds
         }
 
-        return results
+        return results.filter { !blockedUserIds.contains($0.poll.authorId) }
     }
     
     func fetchPollOptions(pollId: String) async throws -> [PollOption] {
@@ -339,9 +341,9 @@ class PollManager {
         }
     }
     
-    func getPollsFromSearch(keyword: String, allPollsNearby: [PollWithOptions]) -> [PollWithOptions] {
+    func getPollsFromSearch(keyword: String, allPollsNearby: [PollWithOptions], blockedUserIds: [String] = []) -> [PollWithOptions] {
 
-        return allPollsNearby.filter { poll in
+        let base = allPollsNearby.filter { poll in
             let lower = keyword.lowercased()
             
             // 1. Match post name
@@ -359,9 +361,10 @@ class PollManager {
             
             return false
         }
+        return base.filter { !blockedUserIds.contains($0.poll.authorId) }
     }
     
-    func getGlobalPollsFromSearch(keyword: String) async throws -> [PollWithOptions] {
+    func getGlobalPollsFromSearch(keyword: String, blockedUserIds: [String] = []) async throws -> [PollWithOptions] {
         let tokens = keyword
             .lowercased()
             .split(separator: " ")
@@ -382,7 +385,7 @@ class PollManager {
             return tokens.allSatisfy { tokenSet.contains($0) }
         }
 
-        return filtered
+        return filtered.filter { !blockedUserIds.contains($0.poll.authorId) }
     }
     
     func addPollVote(pollId: String, optionId: String) async throws {
@@ -428,6 +431,7 @@ class PollManager {
     func getUserPolls(
         uid: String,
         pageSize: Int = 5,
+        blockedUserIds: [String] = [],
         cursor: PollCursor?
     ) async throws -> ([PollWithOptions], PollCursor?) {
 
@@ -457,6 +461,8 @@ class PollManager {
             let poll = mapPoll(document: doc)
             return PollWithOptions(id: poll.id, poll: poll, options: [])
         }
+        
+        let filtered = polls.filter { !blockedUserIds.contains($0.poll.authorId) }
 
         let nextCursor: PollCursor? = {
             guard hasMore, let last = pageDocs.last else { return nil }
@@ -469,10 +475,10 @@ class PollManager {
             )
         }()
 
-        return (polls, nextCursor)
+        return (filtered, nextCursor)
     }
     
-    func getPollsFromIds(ids: [String]) async throws -> [PollWithOptions] {
+    func getPollsFromIds(ids: [String], blockedUserIds: [String] = []) async throws -> [PollWithOptions] {
         guard !ids.isEmpty else { return [] }
         var results: [PollWithOptions] = []
         let chunks = Array(ids.prefix(100)).chunked(into: 10)
@@ -487,7 +493,7 @@ class PollManager {
                 results.append(PollWithOptions(id: poll.id, poll: poll, options: []))
             }
         }
-        return results
+        return results.filter { !blockedUserIds.contains($0.poll.authorId) }
     }
     
     func incrementReports(pollId: String) async throws {

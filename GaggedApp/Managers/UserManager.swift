@@ -18,10 +18,12 @@ enum ContributionType {
 struct AuthDataResultModel {
     let uid: String
     let email: String
+    let isAdmin: Bool
     
-    init(user: User) {
+    init(user: User, isAdmin: Bool) {
         self.uid = user.uid
         self.email = user.email ?? ""
+        self.isAdmin = isAdmin
     }
 }
 
@@ -35,6 +37,7 @@ class UserManager {
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress = ""
     @AppStorage("isAdmin") var isAdmin = false
     @AppStorage("isBanned") var isBanned = false
+    @AppStorage("isLoggedIn") var isLoggedIn = false
     
     let specificDate = Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 1, hour: 0, minute: 0))! // Example for a specific date
     
@@ -49,7 +52,9 @@ class UserManager {
     @discardableResult
     func signUpUser(email: String, password: String) async throws -> AuthDataResultModel {
         let authDataResult = try await Auth.auth().createUser(withEmail: email, password: password)
-        return AuthDataResultModel(user: authDataResult.user)
+        let claims = try await authDataResult.user.getIDTokenResult(forcingRefresh: true)
+        let isAdmin = claims.claims["isAdmin"] as? Bool ?? false
+        return AuthDataResultModel(user: authDataResult.user, isAdmin: isAdmin)
     }
     
     func setNewProfileImage(address: String) async throws {
@@ -65,12 +70,11 @@ class UserManager {
             "uid" : user.uid,
             "email" : user.email,
             "imageAddress" : imageAddress,
-            "garma" : 0,
+            "gags" : 0,
             "username" : usernm,
             "createdAt": Timestamp(date: Date()),
             "numPosts" : 0,
             "notificationsEnabled" : false,
-            "isAdmin" : false,
             "strikes" : 0,
         ]
         try await usersCollection.document(user.uid).setData(userData, merge: false)
@@ -78,6 +82,7 @@ class UserManager {
         userId = user.uid
         username = usernm
         chosenProfileImageAddress = imageAddress
+        isAdmin = user.isAdmin
     }
     
     func addStrikeAndCheckBan(userId: String) async throws {
@@ -119,14 +124,11 @@ class UserManager {
         }
     }
     
-    
-    func addPostToUser(userId: String) async throws {
-        try await usersCollection.document(userId).updateData(["numPosts": FieldValue.increment(Int64(1))])
-    }
-    
     func logInUser(email: String, password: String) async throws -> AuthDataResultModel {
         let authresult = try await Auth.auth().signIn(withEmail: email, password: password)
-        return AuthDataResultModel(user: authresult.user)
+        let claims = try await authresult.user.getIDTokenResult(forcingRefresh: true)
+        let isAdmin = claims.claims["isAdmin"] as? Bool ?? false
+        return AuthDataResultModel(user: authresult.user, isAdmin: isAdmin)
     }
     
     func signOutUser() async throws {
@@ -140,6 +142,7 @@ class UserManager {
                 self.chosenProfileImageAddress = ""
                 self.isAdmin = false
                 self.isBanned = false
+                self.isLoggedIn = false
             }
             print("User signed out successfully")
         } catch let signOutError as NSError {
@@ -241,22 +244,26 @@ class UserManager {
         guard let user = Auth.auth().currentUser else {
             throw NSError(domain: "AuthManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user signed in"])
         }
-
         let credential = EmailAuthProvider.credential(withEmail: email, password: password)
 
-        // Reauthenticate
-        _ = try await user.reauthenticate(with: credential)
+        // 1. Reauthenticate
+        try await user.reauthenticate(with: credential)
 
-        // Delete user
-        try await user.delete()
-
-        // Optional: clean up Firestore
-        try await cleanupUserData(userId: user.uid)
+        // 2. Attempt Firestore cleanup FIRST
+        do {
+            try await cleanupUserData(userId: user.uid)
+        } catch {
+            print("Firestore cleanup failed:", error.localizedDescription)
+            throw error  // 🚫 STOP here — user is still signed in
+        }
         
         self.userEmail = ""
         self.userId = ""
         self.username = ""
         self.chosenProfileImageAddress = ""
+        self.isLoggedIn = false
+        // 3. Only delete auth user if cleanup succeeded
+        try await user.delete()
     }
     
     func cleanupUserData(userId: String) async throws {
@@ -329,15 +336,14 @@ class UserManager {
         let id = doc["uid"] as? String ?? ""
         let username = doc["username"] as? String ?? "Anonymous"
         let imageAddress = doc["imageAddress"] as? String ?? ""
-        let garma = doc["garma"] as? Int ?? 0
+        let gags = doc["gags"] as? Int ?? 0
         let createdAt = doc["createdAt"] as? Timestamp ?? Timestamp(date: Date())
         let keywords = doc["keywords"] as? [String] ?? []
         let numPosts = doc["numPosts"] as? Int ?? 0
-        let isAdmin = doc["isAdmin"] as? Bool ?? false
         
         print("mapping doc", id)
         
-        return UserModel(id: id, username: username, garma: garma, imageAddress: imageAddress, createdAt: createdAt, isAdmin: isAdmin, numPosts: numPosts, keywords: keywords)
+        return UserModel(id: id, username: username, gags: gags, imageAddress: imageAddress, createdAt: createdAt, numPosts: numPosts, keywords: keywords)
     }
     
     func addGags(userId: String, contributionType: ContributionType) {
@@ -345,11 +351,11 @@ class UserManager {
             guard !userId.isEmpty else { return }
             switch contributionType {
             case .post:
-                try await usersCollection.document(userId).updateData(["garma": FieldValue.increment(Int64(10))])
+                try await usersCollection.document(userId).updateData(["gags": FieldValue.increment(Int64(10))])
             case .comment:
-                try await usersCollection.document(userId).updateData(["garma": FieldValue.increment(Int64(4))])
+                try await usersCollection.document(userId).updateData(["gags": FieldValue.increment(Int64(4))])
             case .poll:
-                try await usersCollection.document(userId).updateData(["garma": FieldValue.increment(Int64(8))])
+                try await usersCollection.document(userId).updateData(["gags": FieldValue.increment(Int64(8))])
             }
         }
     }

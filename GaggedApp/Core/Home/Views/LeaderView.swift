@@ -12,11 +12,13 @@ struct LeaderView: View {
     @EnvironmentObject var leaderViewModel: LeaderViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var windowSize: WindowSize
     
     @Binding var showPostView: Bool
     @Binding var selectedPost: PostModel?
     @Binding var selectedTab: TabBarItem
+    @Binding var postScreenType: ScreenType
     
     @State var thisWeekIndex: Int = 0
     @State var allUpIndex: Int = 0
@@ -54,7 +56,7 @@ struct LeaderView: View {
 
             .refreshable {
                 Task {
-                    try await leaderViewModel.fetchMoreLeaderboards(cities: locationManager.citiesInRange)
+                    try await leaderViewModel.fetchMoreLeaderboards(cities: locationManager.citiesInRange, blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                 }
             }
         }
@@ -69,7 +71,7 @@ struct LeaderView: View {
         .task {
             Task {
                 if !leaderViewModel.hasLoaded {
-                    try await leaderViewModel.fetchLeaderboardsIfNeeded(cities: locationManager.citiesInRange)
+                    try await leaderViewModel.fetchLeaderboardsIfNeeded(cities: locationManager.citiesInRange, blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                 }
                 leaderViewModel.hasLoaded = true 
             }
@@ -100,12 +102,13 @@ struct LeaderView: View {
                                 .onTapGesture {
                                     selectedPost = leaderViewModel.thisWeekUp[idx]
                                     postViewModel.setPost(postSelection: leaderViewModel.thisWeekUp[idx])
+                                    postScreenType = .leaderBoard
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         showPostView = true
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.loadInitialRootComments()
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }
@@ -153,12 +156,13 @@ struct LeaderView: View {
                                 .onTapGesture {
                                     selectedPost = post
                                     postViewModel.setPost(postSelection: post)
+                                    postScreenType = .leaderBoard
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         showPostView = true
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.loadInitialRootComments()
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }
@@ -195,12 +199,13 @@ struct LeaderView: View {
                                 .onTapGesture {
                                     selectedPost = post
                                     postViewModel.setPost(postSelection: post)
+                                    postScreenType = .leaderBoard
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         showPostView = true
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.loadInitialRootComments()
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }

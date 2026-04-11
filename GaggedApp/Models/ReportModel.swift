@@ -18,6 +18,7 @@ enum ReportReason: String {
     case hate = "hate"
     case inapropriate = "inappropriate"
     case spam = "spam"
+    case communityGuidlines = "communityGuidlines"
     case other = "other"
 }
 

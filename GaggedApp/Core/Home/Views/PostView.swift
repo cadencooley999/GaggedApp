@@ -53,6 +53,8 @@ struct PostView: View {
     @State var isCommentTextFieldFocusedState: Bool = false
     @State var voteInFlight: Bool = false
     
+    @Binding var screenType: ScreenType
+    
     @Namespace var commentBubbles
     
     var body: some View {
@@ -97,7 +99,7 @@ struct PostView: View {
                     .refreshable {
                         Task {
                             CommentsCache.shared.clearPost(postId: post.id)
-                            try await postViewModel.loadInitialRootComments()
+                            try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                         }
                     }
                     .onScrollPhaseChange { oldPhase, newPhase in
@@ -166,7 +168,7 @@ struct PostView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: showProfilePopup)
         .sheet(isPresented: $showOptionsSheet) {
-            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView, showPollView: $showPollView,  showReportSheet: $showReportSheet, preReportInfo: $preReportInfo, screenType: .pollsFeed)
+            OptionsSheet(parentPostId: postViewModel.post?.id, selectedItemForOptions: $selectedItemForOptions, showOptionsSheet: $showOptionsSheet, showPostView: $showPostView, showPollView: $showPollView,  showReportSheet: $showReportSheet, preReportInfo: $preReportInfo, screenType: screenType)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.ultraThickMaterial) // or .regularMaterial
@@ -224,8 +226,9 @@ struct PostView: View {
                 // Right column: fixed width matching the left-side width
                 HStack {
                     Spacer(minLength: 0)
-                    Image(systemName: "chart.bar.horizontal.page")
-                        .font(.title3)
+                    Image("PollIcon")
+                        .resizable()
+                        .frame(width: 22, height: 22)
                         .padding(8)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
@@ -428,7 +431,7 @@ struct PostView: View {
                     if parent.id == postViewModel.rootComments.last?.id && postViewModel.hasMoreComments == true {
                         Task {
                             print("has more?")
-                            try await postViewModel.fetchRootComments()
+                            try await postViewModel.fetchRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                         }
                     }
                 }

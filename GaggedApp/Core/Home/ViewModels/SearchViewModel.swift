@@ -3,7 +3,6 @@
 ////  GaggedApp
 ////
 ////  Created by Caden Cooley on 10/10/25.
-////
 //
 import Foundation
 import SwiftUI
@@ -22,7 +21,7 @@ final class SearchViewModel: ObservableObject {
     @Published var loadedPolls: [PollWithOptions] = []
     @Published var globalPostMatrix: [[PostModel]] = []
     @Published var globalPollList: [PollWithOptions] = []
-    @Published var columns: Int = 3
+    @Published var columns: Int = 2
 //    @Published var allPostsNearby: [PostModel] = []
 //    @Published var firstPostsNearby: [PostModel] = []
 //    @Published var allPollsNearby: [PollWithOptions] = []
@@ -77,22 +76,28 @@ final class SearchViewModel: ObservableObject {
         }
     }
     
-    func appendPolls(polls: [PollWithOptions]) {
+    func appendPolls(polls: [PollWithOptions], animate: Bool = true) {
         let filtered = polls.filter { globalPollIds.insert($0.id).inserted }
-        withAnimation(.easeInOut(duration: 0.3)) {
+        if animate {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                loadedPolls.append(contentsOf: filtered)
+                globalPollList.append(contentsOf: filtered)
+            }
+        } else {
             loadedPolls.append(contentsOf: filtered)
             globalPollList.append(contentsOf: filtered)
         }
     }
 
     // MARK: - Subscribers
-    func addSubscribers() {
+    func addSubscribers(blockedUserIds: [String] = []) {
         // Listen for search text changes
         $searchText
             .removeDuplicates()
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] text in
-                self?.performSearchOrDefault()
+                guard let self = self else { return }
+                self.performSearchOrDefault(blockedUserIds: blockedUserIds)
             }
             .store(in: &cancellables)
 
@@ -100,13 +105,17 @@ final class SearchViewModel: ObservableObject {
         $selectedFilter
             .removeDuplicates()
             .sink { [weak self] _ in
-                self?.performSearchOrDefault()
+                guard let self = self else { return }
+                self.performSearchOrDefault(blockedUserIds: blockedUserIds)
             }
             .store(in: &cancellables)
+        
+        // Trigger an initial load using the provided blockedUserIds
+        performSearchOrDefault(blockedUserIds: blockedUserIds)
     }
 
     
-    private func performSearchOrDefault() {
+    private func performSearchOrDefault(blockedUserIds: [String]) {
         guard hasOnboarded, isLoggedIn else { return }
 
         searchTask?.cancel()
@@ -115,9 +124,9 @@ final class SearchViewModel: ObservableObject {
 
             do {
                 if searchText.isEmpty {
-                    try await handleEmptySearch()
+                    try await handleEmptySearch(blockedUserIds: blockedUserIds)
                 } else {
-                    try await handleSearch(text: searchText)
+                    try await handleSearch(text: searchText, blockedUserIds: blockedUserIds)
                 }
             } catch {
                 print("error with searchTask")
@@ -125,17 +134,17 @@ final class SearchViewModel: ObservableObject {
         }
     }
     
-    func loadInitialGlobalPosts() async throws {
+    func loadInitialGlobalPosts(blockedUserIds: [String]) async throws {
         resetGlobalPosts()
-        try await loadGlobalPosts()
+        try await loadGlobalPosts(blockedUserIds: blockedUserIds)
         hasLoadedPosts = true
     }
     
-    func loadGlobalPosts() async throws {
+    func loadGlobalPosts(blockedUserIds: [String]) async throws {
         guard hasMoreGlobalPosts else {return}
         postsIsLoading = true
         defer { postsIsLoading = false }
-        let response = try await postManager.fetchGlobalFeed(cursor: postsCursor)
+        let response = try await postManager.fetchGlobalFeed(blockedUserIds: blockedUserIds, cursor: postsCursor)
         appendPosts(posts: response.0)
         postsCursor = response.1
         hasMoreGlobalPosts = response.1 != nil
@@ -150,18 +159,18 @@ final class SearchViewModel: ObservableObject {
         hasLoadedPosts = false
     }
     
-    func loadInitialGlobalPolls() async throws {
+    func loadInitialGlobalPolls(blockedUserIds: [String]) async throws {
         resetGlobalPolls()
-        try await loadGlobalPolls()
+        try await loadGlobalPolls(animate: false, blockedUserIds: blockedUserIds)
         hasLoadedPolls = true
     }
     
-    func loadGlobalPolls() async throws {
+    func loadGlobalPolls(animate: Bool = true, blockedUserIds: [String]) async throws {
         guard hasMoreGlobalPolls else {return}
         pollsIsLoading = true
         defer { pollsIsLoading = false }
-        let response = try await pollManager.fetchGlobalPollFeed(pageSize: 15, cursor: pollsCursor)
-        appendPolls(polls: response.0)
+        let response = try await pollManager.fetchGlobalPollFeed(pageSize: 15, blockedUserIds: blockedUserIds, cursor: pollsCursor)
+        appendPolls(polls: response.0, animate: animate)
         pollsCursor = response.1
         hasMoreGlobalPolls = response.1 != nil
     }
@@ -177,10 +186,10 @@ final class SearchViewModel: ObservableObject {
 
     // MARK: - Empty Search
     
-    private func handleEmptySearch() async throws {
+    private func handleEmptySearch(blockedUserIds: [String]) async throws {
         if selectedFilter == .posts {
             if loadedPosts.isEmpty {
-                try await loadInitialGlobalPosts()
+                try await loadInitialGlobalPosts(blockedUserIds: blockedUserIds)
             }
             print("resetting")
             globalPostMatrix = simpleSplit(
@@ -189,42 +198,42 @@ final class SearchViewModel: ObservableObject {
             )
         } else {
             if loadedPolls.isEmpty {
-                try await loadInitialGlobalPolls()
+                try await loadInitialGlobalPolls(blockedUserIds: blockedUserIds)
             }
             globalPollList = loadedPolls
         }
     }
 
     // MARK: - Active Search
-    private func handleSearch(text: String) async throws {
+    private func handleSearch(text: String, blockedUserIds: [String]) async throws {
         defer { postsIsLoading = false; pollsIsLoading = false}
         if selectedFilter == .posts {
             postsIsLoading = true
-            let result = try await postManager.getGlobalPostsFromSearch(keyword: text)
+            let result = try await postManager.getGlobalPostsFromSearch(keyword: text, blockedUserIds: blockedUserIds)
             globalPostMatrix = simpleSplit(posts: result, columns: columns)
         } else {
             pollsIsLoading = true
-            let result = try await pollManager.getGlobalPollsFromSearch(keyword: text)
+            let result = try await pollManager.getGlobalPollsFromSearch(keyword: text, blockedUserIds: blockedUserIds)
             globalPollList = result
         }
     }
     
-    func handlePollsRefresh() async throws {
+    func handlePollsRefresh(blockedUserIds: [String]) async throws {
         if searchText.isEmpty {
-            try await loadInitialGlobalPolls()
+            try await loadInitialGlobalPolls(blockedUserIds: blockedUserIds)
         }
         if !searchText.isEmpty {
-            try await handleSearch(text: searchText)
+            try await handleSearch(text: searchText, blockedUserIds: blockedUserIds)
         }
         PollCache.shared.clearCache()
     }
     
-    func handlePostsRefresh() async throws {
+    func handlePostsRefresh(blockedUserIds: [String]) async throws {
         if searchText.isEmpty {
-            try await loadInitialGlobalPosts()
+            try await loadInitialGlobalPosts(blockedUserIds: blockedUserIds)
         }
         if !searchText.isEmpty {
-            try await handleSearch(text: searchText)
+            try await handleSearch(text: searchText, blockedUserIds: blockedUserIds)
         }
     }
 
@@ -383,3 +392,4 @@ final class SearchViewModel: ObservableObject {
         }
     }
 }
+

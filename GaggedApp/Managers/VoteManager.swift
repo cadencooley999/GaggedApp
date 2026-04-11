@@ -31,9 +31,12 @@ class VoteManager {
         let week = weekId()
         let statsDocId = "\(vote.postId)_\(week)"
         let statsRef = weekStatsCollection.document(statsDocId)
+        print("saving vote to weekly aggregate1")
 
         do {
             try await Firestore.firestore().runTransaction { tx, _ in
+                
+                print("saving vote to weekly aggregate2")
 
                 // 1️⃣ Create / update weekly aggregate
                 let statsSnap = try? tx.getDocument(statsRef)
@@ -54,12 +57,16 @@ class VoteManager {
                 }
 
                 // 2️⃣ Save vote
+                print("saving vote to weekly aggregate3")
                 tx.setData([
                     "postId": vote.postId,
                     "userId": vote.userId,
                     "upvote": vote.upvote,
                     "timestamp": FieldValue.serverTimestamp()
                 ], forDocument: voteRef)
+                
+                print("saving vote to weekly aggregate4")
+
 
                 return nil
             }
@@ -92,6 +99,7 @@ class VoteManager {
                 return nil
             }
         } catch {
+            print("error in the delete Vote")
             throw VoteError.deleteFailed
         }
     }

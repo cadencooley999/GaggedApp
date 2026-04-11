@@ -20,6 +20,7 @@ struct OneSearch: View {
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var profileViewModel: ProfileViewModel
     @EnvironmentObject var windowSize: WindowSize
+    @EnvironmentObject var homeViewModel: HomeViewModel
 //    @EnvironmentObject var eventViewModel: EventViewModel
     
     @Binding var hideTabBar: Bool
@@ -32,6 +33,8 @@ struct OneSearch: View {
     @Binding var showPollView: Bool
     @Binding var showReportView: Bool
     @Binding var preReportInfo: preReportModel?
+    @Binding var postScreenType: ScreenType
+
     @FocusState var isFocused: Bool
     
     @State var showxmark: Bool = false
@@ -74,8 +77,11 @@ struct OneSearch: View {
             }
         }
         .task {
+            if windowSize.size.width > 700 && searchViewModel.columns != 3 {
+                searchViewModel.columns = 3
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: {
-                searchViewModel.addSubscribers()
+                searchViewModel.addSubscribers(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             })
 //            if !searchViewModel.hasLoadedPosts {
 //                Task {
@@ -225,7 +231,7 @@ struct OneSearch: View {
                     .padding(.top, 172)
                     .padding(.bottom, 100)
                     .customRefreshable {
-                        try? await searchViewModel.handlePostsRefresh()
+                        try? await searchViewModel.handlePostsRefresh(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                     }
             }
             .background(Color.theme.background.ignoresSafeArea())
@@ -265,7 +271,7 @@ struct OneSearch: View {
                     .padding(.top, 172)
                     .padding(.bottom, 100)
                     .customRefreshable {
-                        try? await searchViewModel.handlePollsRefresh()
+                        try? await searchViewModel.handlePollsRefresh(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                     }
             }
             .background(Color.theme.background.ignoresSafeArea())
@@ -284,7 +290,7 @@ struct OneSearch: View {
         ZStack {
             LazyVStack {
                 HStack(alignment: .top){
-                    ForEach(0..<searchViewModel.columns) { x in
+                    ForEach(Array(searchViewModel.globalPostMatrix.indices), id: \.self) { x in
                         LazyVStack {
                             if searchViewModel.globalPostMatrix.indices.contains(x) {
                                 if !searchViewModel.globalPostMatrix[x].isEmpty {
@@ -298,12 +304,13 @@ struct OneSearch: View {
                                                 print("Little Post Tapped")
                                                 selectedPost = post
                                                 postViewModel.setPost(postSelection: post)
+                                                postScreenType = .searchFeed
                                                 withAnimation(.easeInOut(duration: 0.2)) {
                                                     showPostView = true
                                                 }
                                                 Task {
                                                     postViewModel.commentsIsLoading = true
-                                                    try await postViewModel.loadInitialRootComments()
+                                                    try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                                     postViewModel.commentsIsLoading = false
                                                 }
                                             }
@@ -311,7 +318,7 @@ struct OneSearch: View {
                                                 if post.id == searchViewModel.loadedPosts.last?.id {
                                                     if searchViewModel.searchText.isEmpty {
                                                         Task {
-                                                            try await searchViewModel.loadGlobalPosts()
+                                                            try await searchViewModel.loadGlobalPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                                         }
                                                     }
                                                 }
@@ -351,7 +358,7 @@ struct OneSearch: View {
                                 if poll.id == searchViewModel.loadedPolls.last?.id {
                                     if searchViewModel.searchText.isEmpty {
                                         Task {
-                                            try await searchViewModel.loadGlobalPolls()
+                                            try await searchViewModel.loadGlobalPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                         }
                                     }
                                 }

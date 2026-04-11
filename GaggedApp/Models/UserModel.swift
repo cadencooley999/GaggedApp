@@ -11,10 +11,9 @@ import FirebaseFirestore
 struct UserModel: Identifiable {
     let id: String
     let username: String
-    let garma: Int
+    let gags: Int
     let imageAddress: String
     let createdAt: Timestamp
-    let isAdmin: Bool
     var numPosts: Int
     let keywords: [String]
     

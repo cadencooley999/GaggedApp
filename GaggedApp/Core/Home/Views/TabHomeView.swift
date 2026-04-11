@@ -194,6 +194,7 @@ struct TabHomeView: View {
     @State var showReportView: Bool = false
     @State var preReportInfo: preReportModel? = nil
     @State var showInspectionView: Bool = false
+    @State var postScreenType: ScreenType = .homeFeed
     
     @Namespace private var postAnimation
     @State private var selectedPost: PostModel?
@@ -224,16 +225,16 @@ struct TabHomeView: View {
             CustomTabBarContainerView(tabs: allTabs, selectedTab: $selectedTab, hideTabBar: $hideTabBar, showAddPostView: $showAddPostView, showPostView: $showPostView, showSearchView: $showSearchView, showEventView: $showEventView, showEventSearchView: $showEventSearchView, selectedPost: $selectedPost, showSettingsView: $showSettingsView, showProfileView: $showProfileView, searchViewFocused: $searchViewFocused, showCityPicker: $showCityPicker, showSearchBar: $showSearchBar) {
                 ZStack {
                     TabView(selection: $selectedTab){
-                        HomeView(hideTabBar: $hideTabBar, showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab, postAnimation: postAnimation)
+                        HomeView(hideTabBar: $hideTabBar, showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab, postScreenType: $postScreenType, postAnimation: postAnimation)
                             .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .tag(allTabs[0])
                         PollsView(selectedTab: $selectedTab, hideTabBar: $hideTabBar, selectedPost: $selectedPost, showPostView: $showPostView, selectedPoll: $selectedPoll, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
                             .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .tag(allTabs[1])
-                        LeaderView(showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab)
+                        LeaderView(showPostView: $showPostView, selectedPost: $selectedPost, selectedTab: $selectedTab, postScreenType: $postScreenType)
                             .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .tag(allTabs[2])
-                        OneSearch(hideTabBar: $hideTabBar, selectedTab: $selectedTab, showPostView: $showPostView, showEventView: $showEventView, selectedPost: $selectedPost, searchViewFocused: $searchViewFocused, showSearchBar: $showSearchBar, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
+                        OneSearch(hideTabBar: $hideTabBar, selectedTab: $selectedTab, showPostView: $showPostView, showEventView: $showEventView, selectedPost: $selectedPost, searchViewFocused: $searchViewFocused, showSearchBar: $showSearchBar, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, postScreenType: $postScreenType)
 //                            .frame(width: windowSize.size.width, height: windowSize.size.height)
                             .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                             .tag(allTabs[3])
@@ -254,7 +255,7 @@ struct TabHomeView: View {
                     .zIndex(2)
             }
             if showProfileView {
-                ProfileView(selectedTab: $selectedTab, selectedPost: $selectedPost, showPostView: $showPostView, showEventView: $showEventView, showSettingsView: $showSettingsView, showProfileView: $showProfileView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, showInspectionView: $showInspectionView)
+                ProfileView(selectedTab: $selectedTab, selectedPost: $selectedPost, showPostView: $showPostView, showEventView: $showEventView, showSettingsView: $showSettingsView, showProfileView: $showProfileView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, showInspectionView: $showInspectionView, postScreenType: $postScreenType)
                     .zIndex(1)
                     .transition(.move(edge: .trailing))
             }
@@ -280,16 +281,19 @@ struct TabHomeView: View {
                         // Centered popup container
                         VStack {
                             Spacer(minLength: 0)
-                            PostView(
-                                showPostView: $showPostView,
-                                showSearchView: $showSearchView,
-                                hideTabBar: $hideTabBar,
-                                showAddPostView: $showAddPostView,
-                                showPollView: $showPollView,
-                                showProfileView: $showProfileView,
-                                showReportSheet: $showReportView,
-                                preReportInfo: $preReportInfo
-                            )
+                            ZStack {
+                                PostView(
+                                    showPostView: $showPostView,
+                                    showSearchView: $showSearchView,
+                                    hideTabBar: $hideTabBar,
+                                    showAddPostView: $showAddPostView,
+                                    showPollView: $showPollView,
+                                    showProfileView: $showProfileView,
+                                    showReportSheet: $showReportView,
+                                    preReportInfo: $preReportInfo,
+                                    screenType: $postScreenType
+                                )
+                            }
                             .frame(maxWidth: min(windowSize.size.width * 0.75, 800),
                                    maxHeight: min(windowSize.size.height * 0.95, 1000))
                             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
@@ -308,11 +312,12 @@ struct TabHomeView: View {
                             showPollView: $showPollView,
                             showProfileView: $showProfileView,
                             showReportSheet: $showReportView,
-                            preReportInfo: $preReportInfo
+                            preReportInfo: $preReportInfo,
+                            screenType: $postScreenType
                         )
                         .zIndex(3)
                         .opacity(1)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .transition(.opacity)
                     }
                 }
             }
@@ -383,7 +388,7 @@ struct TabHomeView: View {
         }
         Task {
             postViewModel.commentsIsLoading = true
-            try await postViewModel.loadInitialRootComments()
+            try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             postViewModel.commentsIsLoading = false
         }
     }

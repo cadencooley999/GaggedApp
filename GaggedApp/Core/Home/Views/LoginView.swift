@@ -122,6 +122,7 @@ struct LoginView: View {
                         Button {
                             Task {
                                 failure = false
+                                print("trying login func")
                                 let success = await loginViewModel.login(
                                     email: email,
                                     password: password
@@ -129,7 +130,6 @@ struct LoginView: View {
                                 failure = !success
                                 if success {
                                     isLoggedIn = true
-                                    UserListenerManager.shared.startListening()
                                 }
                             }
                         } label: {

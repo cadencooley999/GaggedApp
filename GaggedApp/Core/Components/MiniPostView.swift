@@ -83,6 +83,7 @@ struct MiniPostView: View {
     var post: PostModel
     let width: CGFloat?
     let stroked: Bool?
+
     @State private var postCity: String = ""
     
     @EnvironmentObject var windowSize: WindowSize
@@ -157,16 +158,23 @@ struct MiniPostView: View {
                                 HStack(spacing: 2) {
                                     Text("\(post.upvotes)")
                                         .monospacedDigit()
-                                    Image(systemName: "arrow.up")
-                                        .foregroundColor(Color.theme.darkBlue)
+                                    Image("down.arrow")
+                                        .resizable()
+                                        .frame(width: 16, height: 26)
+                                        .foregroundStyle(Color.theme.darkBlue)
+                                        .scaleEffect(0.7)
+                                        .rotationEffect(Angle(degrees: 180))
                                 }
                                 .font(.subheadline.bold())
 
                                 HStack(spacing: 2) {
                                     Text("\(post.downvotes)")
                                         .monospacedDigit()
-                                    Image(systemName: "arrow.down")
-                                        .foregroundColor(Color.theme.darkRed)
+                                    Image("down.arrow")
+                                        .resizable()
+                                        .frame(width: 16, height: 26)
+                                        .foregroundStyle(Color.theme.darkRed)
+                                        .scaleEffect(0.7)
                                 }
                                 .font(.subheadline.bold())
 

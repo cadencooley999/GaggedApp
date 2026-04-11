@@ -19,12 +19,14 @@ struct OptionsSheet: View {
     @Binding var showPostView: Bool
     @Binding var showPollView: Bool
     
+    @EnvironmentObject var feedStore: FeedStore
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var profileViewModel: ProfileViewModel
     @EnvironmentObject var pollsViewModel: PollsViewModel
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var searchViewModel: SearchViewModel
     @EnvironmentObject var inspectionViewModel: InspectionViewModel
+    @EnvironmentObject var leaderViewModel: LeaderViewModel
 //    @EnvironmentObject var eventViewModel: EventViewModel
     
     @Binding var showReportSheet: Bool
@@ -135,6 +137,83 @@ struct OptionsSheet: View {
             if case .comment(_) = selectedItemForOptions {
                 EmptyView()
             } else {
+                if selectedItemForOptions?.authorId != userId {
+                    HStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "xmark.square")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Color.theme.brightRed)
+                            Text("Block User")
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Color.theme.brightRed)
+                            Spacer()
+                        }
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 56)
+                        .contentShape(Rectangle())
+                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
+                    }
+                    .onTapGesture {
+                        showOptionsSheet = false
+                        if let authorId = selectedItemForOptions?.authorId {
+                            if authorId != userId {
+                                print("Blocking author ", authorId)
+                                Task {
+                                    try await BlockingManager.shared.blockUser(userId: userId, targetId: authorId)
+                                    feedStore.blocked.insert(authorId)
+
+                                    // Reset all feeds/state that can cache content
+                                    homeViewModel.reset()
+                                    pollsViewModel.reset()
+                                    searchViewModel.resetGlobalPosts()
+                                    searchViewModel.resetGlobalPolls()
+                                    profileViewModel.resetSaved()
+                                    postViewModel.resetRootComments()
+                                    leaderViewModel.reset()
+
+                                    // Dismiss currently presented views for the selected item
+                                    switch selectedItemForOptions {
+                                    case .post:
+                                        showPostView = false
+                                    case .comment:
+                                        // If we're on a post detail, refresh root comments after blocking
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                    case .poll:
+                                        showPollView = false
+                                    case .none:
+                                        break
+                                    }
+
+                                    // Reload only the feed that corresponds to the current screen
+                                    switch screenType {
+                                    case .searchFeed:
+                                        try await searchViewModel.loadInitialGlobalPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        try await searchViewModel.loadInitialGlobalPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                    case .pollsFeed:
+                                        try await pollsViewModel.getInitialPolls(cityIds: LocationManager.shared.citiesInRange)
+                                    case .profileFeed:
+                                        // Reload both posts and polls for profile to reflect block
+                                        await profileViewModel.loadInitialUserPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        await profileViewModel.loadInitialUserPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                    case .savedFeed:
+                                        try await profileViewModel.loadSavedIfNeeded(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                    case .inspectionFeed:
+                                        // If there is an inspection feed, refresh it to reflect block
+                                        await inspectionViewModel.loadInitialReportedPolls()
+                                    case .homeFeed:
+                                        await homeViewModel.loadInitialPostFeed(cityIds: LocationManager.shared.citiesInRange)
+                                    case .leaderBoard:
+                                        try await leaderViewModel.fetchMoreLeaderboards(cities: LocationManager.shared.citiesInRange, blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                    @unknown default:
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 HStack(spacing: 12) {
                     HStack(spacing: 12) {
                         Image(systemName: "flag")
@@ -185,21 +264,29 @@ struct OptionsSheet: View {
                                     await profileViewModel.loadInitialUserPosts()
                                 case .poll(let poll):
                                     showOptionsSheet = false
+                                    showPollView = false
                                     try await pollsViewModel.deletePoll(pollId: poll.id)
                                     switch screenType {
                                     case .searchFeed:
-                                        try await searchViewModel.loadInitialGlobalPolls()
+                                        try await searchViewModel.loadInitialGlobalPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                     case .pollsFeed:
-//                                        try await pollsViewModel.getInitialPolls(cityIds: LocationManager.shared.citiesInRange)
-                                        break
+                                        try await pollsViewModel.getInitialPolls(cityIds: LocationManager.shared.citiesInRange)
                                     case .profileFeed:
-                                        await profileViewModel.loadInitialUserPolls()
+                                        await profileViewModel.loadInitialUserPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                     case .savedFeed:
-                                        try await profileViewModel.refreshSaved()
+                                        try await profileViewModel.refreshSaved(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                     case .inspectionFeed:
                                         await inspectionViewModel.loadInitialReportedPolls()
+                                    case .homeFeed:
+                                        // No polls on home feed; nothing to reload
+                                        break
+                                    case .leaderBoard:
+                                        // Leaderboard unaffected by poll deletion
+                                        break
+                                    @unknown default:
+                                        break
                                     }
-                            
+                                
                                 case .comment(let comment):
                                     if let postId = parentPostId {
                                         showOptionsSheet = false
@@ -230,4 +317,3 @@ struct OptionsSheet: View {
         return urlString
     }
 }
-

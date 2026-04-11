@@ -36,6 +36,7 @@ struct AddPostView: View {
     @EnvironmentObject var pollsViewModel: PollsViewModel
     @EnvironmentObject var windowSize: WindowSize
     @EnvironmentObject var searchViewModel: SearchViewModel
+    @EnvironmentObject var homeViewModel: HomeViewModel
     
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress: String = ""
     @AppStorage("username") var username: String = ""
@@ -314,7 +315,10 @@ struct AddPostView: View {
                             if newPhase == .interacting { UIApplication.shared.endEditing() }
                         }
                         .onChange(of: focusedField) { newValue in
-                            guard let newValue else { return }
+                            guard let newValue else {
+                                UIApplication.shared.endEditing()
+                                return
+                            }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 withAnimation(.easeInOut(duration: 0.25)) {
                                     switch newValue {
@@ -540,7 +544,11 @@ struct AddPostView: View {
                     }
                     .contentShape(Rectangle())
                     .padding(4)
-                    .onTapGesture { showCitySearch = true }
+                    .onTapGesture {
+                        focusedField = nil
+                        UIApplication.shared.endEditing()
+                        showCitySearch = true
+                    }
                 } else {
                     HStack {
                         ForEach(vm.selectedCities) { city in
@@ -580,6 +588,7 @@ struct AddPostView: View {
             if vm.selectedCities.count < 2 {
                 Button {
                     showCitySearch = true
+                    UIApplication.shared.endEditing()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
@@ -593,6 +602,7 @@ struct AddPostView: View {
             else {
                 Button {
                     showCitySearch = true
+                    UIApplication.shared.endEditing()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "pencil.circle.fill")

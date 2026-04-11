@@ -168,7 +168,7 @@ struct InspectionView: View {
                 .font(.caption)
                 .foregroundStyle(Color.theme.darkRed)
             if reasons.isEmpty {
-                Text("No flags")
+                Text("Image Flagger or No Flags")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -281,7 +281,7 @@ struct InspectionView: View {
                                         Task {
                                             postViewModel.commentsIsLoading = true
                                             print("home com fetch")
-                                            try await postViewModel.loadInitialRootComments()
+                                            try await postViewModel.loadInitialRootComments(blockedIds: [])
                                             postViewModel.commentsIsLoading = false
                                         }
                                     }
@@ -434,7 +434,7 @@ struct InspectionView: View {
                                         showPostView = true
                                     }
                                     postViewModel.commentsIsLoading = true
-                                    try await postViewModel.loadInitialRootComments()
+                                    try await postViewModel.loadInitialRootComments(blockedIds: [])
                                     postViewModel.commentsIsLoading = false
                                 }
                             } label: {

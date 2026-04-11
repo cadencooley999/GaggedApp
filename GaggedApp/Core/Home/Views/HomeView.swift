@@ -18,15 +18,19 @@ struct HomeView: View {
         return window.safeAreaInsets
     }
     
+    @AppStorage("userId") var userId = ""
+    
     @EnvironmentObject var homeViewModel: HomeViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var feedStore: FeedStore
     @EnvironmentObject var windowSize: WindowSize
     
     @Binding var hideTabBar: Bool
     @Binding var showPostView: Bool
     @Binding var selectedPost: PostModel?
     @Binding var selectedTab: TabBarItem
+    @Binding var postScreenType: ScreenType
     
     @State var scrollOffset = CGPoint.zero
     
@@ -104,14 +108,26 @@ struct HomeView: View {
 //                }
 //        )
         .task {
+            print("running home task")
             Task {
+                if feedStore.hasLoadedBlocked == false {
+                    print("fetching blocked")
+                    try await feedStore.fetchBlockedLists(userId)
+                }
                 guard homeViewModel.hasLoaded == false else { return }
+                if windowSize.size.width > 700 && homeViewModel.columns != 3 {
+                    print(windowSize.size.width, "width")
+                    homeViewModel.columns = 3
+                    print(homeViewModel.columns, "columns")
+                }
                 let cities = try await locationManager.requestLocationIfNeeded(execute: !homeViewModel.hasLoaded)
                 if cities.isEmpty {
                     await homeViewModel.loadInitialPostFeed(cityIds: locationManager.citiesInRange)
+                    print("cities empty")
                 }
                 else {
                     await homeViewModel.loadInitialPostFeed(cityIds: cities)
+                    print("cities not empty")
                 }
                 homeViewModel.hasLoaded = true
             }
@@ -120,7 +136,7 @@ struct HomeView: View {
     
     var postSection: some View {
         HStack {
-            ForEach(0..<homeViewModel.columns) { x in
+            ForEach(Array(homeViewModel.postMatrix.indices), id: \.self) { x in
                 VStack {
                     if homeViewModel.postMatrix.indices.contains(x) {
                         if !homeViewModel.postMatrix[x].isEmpty {
@@ -136,13 +152,14 @@ struct HomeView: View {
                                             print("Little Post Tapped")
                                             selectedPost = post
                                             postViewModel.setPost(postSelection: post)
+                                            postScreenType = .homeFeed
                                             withAnimation(.easeInOut(duration: 0.2)) {
                                                 showPostView = true
                                             }
                                             Task {
                                                 postViewModel.commentsIsLoading = true
                                                 print("home com fetch")
-                                                try await postViewModel.loadInitialRootComments()
+                                                try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                                 postViewModel.commentsIsLoading = false
                                             }
                                         }
@@ -166,4 +183,3 @@ struct HomeView: View {
     
 
 }
-

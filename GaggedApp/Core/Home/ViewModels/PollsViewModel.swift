@@ -21,6 +21,8 @@ class PollsViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var poll: PollWithOptions? = nil
     @Published var hasMore: Bool = true
+    @Published var blocked: [String] = []
+    @Published var blockedBy: [String] = []
     
     @Published var columns: [GridItem] = [GridItem()]
     
@@ -52,6 +54,14 @@ class PollsViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        
+        feedStore.$blocked.sink { [weak self] ids in
+            self?.blocked = Array(ids)
+        }.store(in: &cancellables)
+        
+        feedStore.$blockedBy.sink { [weak self] ids in
+            self?.blockedBy = Array(ids)
+        }.store(in: &cancellables)
     }
     
     func fetchPoll(id: String) async throws -> PollWithOptions {
@@ -80,12 +90,13 @@ class PollsViewModel: ObservableObject {
     func getMorePolls(cityIds: [String]) async throws {
         guard !isLoading, hasMore else { return }
         isLoading = true
+        hasLoaded = false
         defer {
             isLoading = false
             hasLoaded = true
         }
         do {
-            let response = try await pollManager.fetchPolls(cityIds: cityIds, cursor: cursor)
+            let response = try await pollManager.fetchPolls(cityIds: cityIds, blockedUserIds: Array(Set(self.blocked + self.blockedBy)), cursor: cursor)
             feedStore.loadedPolls.append(contentsOf: response.polls)
             cursor = response.nextCursor
             hasMore = response.nextCursor != nil

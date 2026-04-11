@@ -20,7 +20,7 @@ struct BannedView: View {
         Task {
             try await UserManager.shared.signOutUser()
             CoreDataManager.teardown()
-            UserListenerManager.shared.stopListening()
+            UserListenerManager.shared.stopUserListener()
             isLoggedIn = false
         }
     }

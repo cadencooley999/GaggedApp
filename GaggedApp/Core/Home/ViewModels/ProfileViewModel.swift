@@ -31,8 +31,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var hasLoadedPolls = false
     @Published var hasLoadedUpvoted = false
     @Published var hasLoadedSaved = false
+    @Published var blockedUsersLoaded = false
     @Published var profPicParams: ProfPicParams? = nil
     @Published var post: PostModel? = nil
+    @Published var blockedUsers: [UserModel] = []
     @Published var userPosts: [PostModel] = []
     @Published var userComments: [CommentModel] = []
     @Published var userPolls: [PollWithOptions] = []
@@ -41,11 +43,12 @@ final class ProfileViewModel: ObservableObject {
     @Published var savedPolls: [PollWithOptions] = []
     @Published var searchText: String = ""
     @Published var searchResults: [MixedType] = []
-    @Published var loadedUser: UserModel = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), isAdmin: false, numPosts: 0, keywords: [])
+    @Published var loadedUser: UserModel = UserModel(id: "", username: "", gags: 0, imageAddress: "", createdAt: Timestamp(date: Date()), numPosts: 0, keywords: [])
     @Published var hasMoreUserPosts: Bool = true
     @Published var hasMoreUserComments: Bool = true
     @Published var hasMoreUserPolls: Bool = true
     @Published var hasMoreUpvotedPosts: Bool = true
+    @Published var postColumns: [GridItem] = [GridItem(), GridItem(), GridItem()]
     
     private var userPostsCursor: ProperPostsCursor? = nil
     private var userCommentsCursor: CommentsCursor? = nil
@@ -122,12 +125,7 @@ final class ProfileViewModel: ObservableObject {
     func loadMoreUserInfo() async throws {
         Task {
             var user = try await userManager.fetchUser(userId: userId)
-            if user.numPosts < 0 {
-                try await userManager.addPostToUser(userId: userId)
-                user.numPosts = 0
-            }
             loadedUser = user
-            isAdmin = loadedUser.isAdmin
             print("IMAGE URL", user.imageAddress)
         }
     }
@@ -137,7 +135,6 @@ final class ProfileViewModel: ObservableObject {
         Task {
             let user = try await userManager.fetchUser(userId: userId)
             loadedUser = user
-            isAdmin = loadedUser.isAdmin
             print("IMAGE URL", user.imageAddress)
         }
     }
@@ -166,10 +163,10 @@ final class ProfileViewModel: ObservableObject {
 //        searchResults = mixAndOrder(postList: searchedPosts, eventList: searchedEvents)
 //    }
     
-    func loadInitialUserPosts() async {
+    func loadInitialUserPosts(blockedUserIds: [String] = []) async {
         hasLoadedPosts = false
         resetUserPosts()
-        await getUserPosts()
+        await getUserPosts(blockedUserIds: blockedUserIds)
     }
     
     func resetUserPosts() {
@@ -179,14 +176,14 @@ final class ProfileViewModel: ObservableObject {
         hasLoadedPosts = false
     }
     
-    func getUserPosts() async {
+    func getUserPosts(blockedUserIds: [String] = []) async {
         print("in, ", hasMoreUserPosts)
         guard !userId.isEmpty, hasMoreUserPosts else { return }
 
         hasLoadedPosts = false
 
         do {
-            let (posts, nextCursor) = try await postManager.getUserPosts(uid: userId, cursor: userPostsCursor)
+            let (posts, nextCursor) = try await postManager.getUserPosts(uid: userId, blockedUserIds: blockedUserIds, cursor: userPostsCursor)
 
             // Cancel any pending UI update
             postsDebounceTask?.cancel()
@@ -210,10 +207,10 @@ final class ProfileViewModel: ObservableObject {
     }
     
     // MARK: - Comments (pagination)
-    func loadInitialUserComments() async {
+    func loadInitialUserComments(blockedUserIds: [String]) async {
         hasLoadedComments
         resetUserComments()
-        await getUserComments()
+        await getUserComments(blockedUserIds: blockedUserIds)
     }
 
     func resetUserComments() {
@@ -223,14 +220,14 @@ final class ProfileViewModel: ObservableObject {
         hasLoadedComments = false
     }
 
-    func getUserComments() async {
+    func getUserComments(blockedUserIds: [String]) async {
         print("comments in, ", hasMoreUserComments)
         guard !userId.isEmpty, hasMoreUserComments else { return }
 
         hasLoadedComments = false
 
         do {
-            let (comments, nextCursor) = try await commentsManager.getUserComments(userId: userId, cursor: userCommentsCursor)
+            let (comments, nextCursor) = try await commentsManager.getUserComments(userId: userId, blockedUserIds: blockedUserIds, cursor: userCommentsCursor)
 
             // Cancel any pending UI update
             commentsDebounceTask?.cancel()
@@ -254,10 +251,10 @@ final class ProfileViewModel: ObservableObject {
     }
     
     // MARK: - Polls (pagination)
-    func loadInitialUserPolls() async {
+    func loadInitialUserPolls(blockedUserIds: [String] = []) async {
         hasLoadedPolls = false
         resetUserPolls()
-        await getUserPolls()
+        await getUserPolls(blockedUserIds: blockedUserIds)
     }
 
     func resetUserPolls() {
@@ -267,14 +264,14 @@ final class ProfileViewModel: ObservableObject {
         hasLoadedPolls = false
     }
 
-    func getUserPolls() async {
+    func getUserPolls(blockedUserIds: [String] = []) async {
         print("polls in, ", hasMoreUserPolls)
         guard !userId.isEmpty, hasMoreUserPolls else { return }
 
         hasLoadedPolls = false
 
         do {
-            let (polls, nextCursor) = try await pollManager.getUserPolls(uid: userId, cursor: userPollsCursor)
+            let (polls, nextCursor) = try await pollManager.getUserPolls(uid: userId, blockedUserIds: blockedUserIds, cursor: userPollsCursor)
 
             // Cancel any pending UI update
             pollsDebounceTask?.cancel()
@@ -298,10 +295,10 @@ final class ProfileViewModel: ObservableObject {
     }
     
     // MARK: - Upvoted (pagination)
-    func loadInitialUpvotedPosts() async {
+    func loadInitialUpvotedPosts(blockedUserIds: [String] = []) async {
         hasLoadedUpvoted = false
         resetUpvotedPosts()
-        await getUpvotedPosts()
+        await getUpvotedPosts(blockedUserIds: blockedUserIds)
     }
 
     func resetUpvotedPosts() {
@@ -311,7 +308,7 @@ final class ProfileViewModel: ObservableObject {
         hasLoadedUpvoted = false
     }
 
-    func getUpvotedPosts() async {
+    func getUpvotedPosts(blockedUserIds: [String] = []) async {
         guard !userId.isEmpty, hasMoreUpvotedPosts else { return }
 
         hasLoadedUpvoted = false
@@ -319,7 +316,7 @@ final class ProfileViewModel: ObservableObject {
         do {
             let (posts, nextCursor) =
                 try await postManager.getUpvotedPostsFromCoreData(
-                    cursor: upvotedPostsCursor
+                    cursor: upvotedPostsCursor, blockedUserIds: blockedUserIds
                 )
 
             // Cancel any pending UI update
@@ -461,35 +458,53 @@ final class ProfileViewModel: ObservableObject {
     }
     
     @MainActor
-    func getSavedPosts() async throws {
+    func getSavedPosts(blockedUserIds: [String] = []) async throws {
         print("Getting Saved Posts ")
         let posts = CoreDataManager.shared.getSavedPosts()
-        savedPosts = try await postManager.getPostsFromIds(ids: posts.map({$0.id ?? ""}))
+        savedPosts = try await postManager.getPostsFromIds(ids: posts.map({$0.id ?? ""}), blockedUserIds: blockedUserIds)
     }
     
     @MainActor
-    func getSavedPolls() async throws {
+    func getSavedPolls(blockedUserIds: [String] = []) async throws {
         let polls = CoreDataManager.shared.getSavedPolls()
         print(polls)
-        savedPolls = try await pollManager.getPollsFromIds(ids: polls.map({$0.id ?? ""}))
+        savedPolls = try await pollManager.getPollsFromIds(ids: polls.map({$0.id ?? ""}), blockedUserIds: blockedUserIds)
     }
     
     @MainActor
-    func loadSavedIfNeeded() async throws {
+    func loadSavedIfNeeded(blockedUserIds: [String] = []) async throws {
         if !hasLoadedSaved {
-            try await getSavedPosts()
-            try await getSavedPolls()
+            try await getSavedPosts(blockedUserIds: blockedUserIds)
+            try await getSavedPolls(blockedUserIds: blockedUserIds)
             hasLoadedSaved = true
         }
     }
     
     @MainActor
-    func refreshSaved() async throws {
+    func refreshSaved(blockedUserIds: [String] = []) async throws {
         hasLoadedSaved = false
-        try await getSavedPosts()
+        try await getSavedPosts(blockedUserIds: blockedUserIds)
         PollCache.shared.clearCache()
-        try await getSavedPolls()
+        try await getSavedPolls(blockedUserIds: blockedUserIds)
         hasLoadedSaved = true
+    }
+    
+    func unblockUser(userId: String, targetId: String) async throws {
+        try await BlockingManager.shared.unblockUser(userId: userId, targetId: targetId)
+    }
+    
+    func getBlockedUsers() async throws {
+        let userIds = try await BlockingManager.shared.fetchBlocked(userId: userId)
+        let users = try await UserManager.shared.fetchUsers(userIds: Array(userIds))
+        blockedUsers = users
+        blockedUsersLoaded = true
+    }
+    
+    func resetSaved() {
+        hasLoadedSaved = false
+        PollCache.shared.clearCache()
+        savedPolls.removeAll()
+        savedPolls.removeAll()
     }
     
     func clearStates() {
@@ -509,7 +524,7 @@ final class ProfileViewModel: ObservableObject {
         searchText = ""
         searchResults = []
         PollCache.shared.clearCache()
-        loadedUser = UserModel(id: "", username: "", garma: 0, imageAddress: "", createdAt: Timestamp(date: Date()), isAdmin: false, numPosts: 0, keywords: [])
+        loadedUser = UserModel(id: "", username: "", gags: 0, imageAddress: "", createdAt: Timestamp(date: Date()), numPosts: 0, keywords: [])
     }
 }
 

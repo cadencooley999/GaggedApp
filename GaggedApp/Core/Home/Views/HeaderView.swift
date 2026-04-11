@@ -87,7 +87,7 @@ struct HeaderView: View {
                             case "Polls":
                                 try await pollsViewModel.getInitialPolls(cityIds: cities)
                             case "LeaderBoard":
-                                try await leaderViewModel.fetchMoreLeaderboards(cities: cities)
+                                try await leaderViewModel.fetchMoreLeaderboards(cities: cities, blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                             default:
                                 break
                             }

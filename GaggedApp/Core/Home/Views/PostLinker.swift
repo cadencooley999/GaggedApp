@@ -115,7 +115,7 @@ struct PostLinker: View {
         ZStack {
             Color(.systemGroupedBackground).ignoresSafeArea()
             HStack {
-                ForEach(0..<searchViewModel.columns) { x in
+                ForEach(Array(searchViewModel.globalPostMatrix.indices), id: \.self) { x in
                     VStack {
                         if searchViewModel.globalPostMatrix.indices.contains(x) {
                             if !searchViewModel.globalPostMatrix[x].isEmpty {

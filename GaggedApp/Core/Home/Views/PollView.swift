@@ -78,7 +78,6 @@ struct PollView: View {
                         selectedPoll = nil
                         pollsViewModel.poll = nil
                     }
-
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             VStack {
@@ -315,7 +314,7 @@ struct PollView: View {
         }
         Task {
             postViewModel.commentsIsLoading = true
-            try await postViewModel.loadInitialRootComments()
+            try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             postViewModel.commentsIsLoading = false
         }
     }

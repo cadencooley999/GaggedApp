@@ -22,11 +22,12 @@ enum PageDirection {
 }
 
 
-
 struct OnboardingView: View {
     
     @EnvironmentObject var vm: OnboardingViewModel
     @EnvironmentObject var locationManager: LocationManager
+    @EnvironmentObject var homeViewModel: HomeViewModel
+    @Environment(\.openURL) var openURL
     
     @AppStorage("hasOnboarded") var hasOnboarded: Bool = false
     
@@ -234,8 +235,20 @@ struct OnboardingView: View {
             // LINKS LIST
             VStack(spacing: 12) {
                 policyLinkRow(title: "Terms of Service")
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                            openURL(URL(string: "https://gaggedapp.web.app/legal/terms.html") ?? URL(string: "https://www.apple.com/")!, prefersInApp: true)
+                    }
                 policyLinkRow(title: "Privacy Policy")
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                            openURL(URL(string: "https://gaggedapp.web.app/legal/privacy.html") ?? URL(string: "https://www.apple.com/")!, prefersInApp: true)
+                    }
                 policyLinkRow(title: "Community Guidelines")
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                            openURL(URL(string: "https://gaggedapp.web.app/legal/community.html") ?? URL(string: "https://www.apple.com/")!, prefersInApp: true)
+                    }
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -661,6 +674,7 @@ struct OnboardingView: View {
 
             Text(title)
                 .font(.body)
+                .foregroundStyle(Color.theme.accent)
 
             Spacer()
 
@@ -671,13 +685,6 @@ struct OnboardingView: View {
         }
         .padding(.horizontal)
         .frame(height: 55)
-        .background(
-            Rectangle()
-                .fill(Color.theme.background.opacity(0.001))
-                .onTapGesture {
-                    // TODO: Open link for \(title)
-                }
-        )
         .glassEffect()
     }
     
@@ -694,13 +701,9 @@ struct OnboardingView: View {
     }
     
     func validateEmail(_ email: String) -> Bool {
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
-        else { return false }
-
-        let range = NSRange(email.startIndex..., in: email)
-        let matches = detector.matches(in: email, options: [], range: range)
-
-        return matches.first?.url?.scheme == "mailto"
+        guard !email.isEmpty else { return false }
+        let pattern = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
+        return email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
     
     func submitSignup() {
@@ -716,7 +719,6 @@ struct OnboardingView: View {
             if passvalid && emailvalid && usernameAppropriate && usernameExist {
                 do {
                     try await vm.signInEmailAndPassword(email: emailInput, password: passwordInput, username: usernameInput.replacingOccurrences(of: "  ", with: ""))
-                    UserListenerManager.shared.startListening()
                 }
                 catch {
                     submitError = error.localizedDescription
@@ -725,20 +727,17 @@ struct OnboardingView: View {
             else {
                 // Determine which page to return to based on validation failures
                 var targetIndex = currentOnboardingTabIndex
-                if passvalid != true {
-                    targetIndex = 3
-                }
-                if emailvalid != true {
+
+                // Determine the earliest invalid step and jump there
+                if !usernameExist || !usernameAppropriate {
+                    showUsernameError = !usernameAppropriate
+                    usernameExistError = !usernameExist
+                    targetIndex = 0
+                } else if !emailvalid {
                     showEmailError = true
+                    targetIndex = 1
+                } else if !passvalid {
                     targetIndex = 2
-                }
-                if usernameAppropriate != true {
-                    showUsernameError = true
-                    targetIndex = 1
-                }
-                if !usernameExist {
-                    usernameExistError = true
-                    targetIndex = 1
                 }
                 // Animate as a backward transition (slide right) from Policy back to the required page
                 pageDirection = .backward

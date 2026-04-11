@@ -37,14 +37,14 @@ final class LeaderViewModel: ObservableObject {
         hasLoaded = false
     }
     
-    func fetchLeaderboardsIfNeeded(cities: [String]) async throws {
+    func fetchLeaderboardsIfNeeded(cities: [String], blockedUserIds: [String]) async throws {
         guard !hasLoaded else {return}
         self.isLoading = true
         defer {self.isLoading = false}
         do {
-            async let allUp = postManager.getTopUpsAllTime(from: cities)
-            async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
-            async let allDown = postManager.getTopDownsAllTime(from: cities)
+            async let allUp = postManager.getTopUpsAllTime(from: cities, blockedUserIds: blockedUserIds)
+            async let thisWeek = postManager.getTopUpsThisWeek(from: cities, blockedUserIds: blockedUserIds)
+            async let allDown = postManager.getTopDownsAllTime(from: cities, blockedUserIds: blockedUserIds)
 
             let (up, week, down) = try await (allUp, thisWeek, allDown)
 
@@ -58,7 +58,7 @@ final class LeaderViewModel: ObservableObject {
         }
     }
     
-    func fetchMoreLeaderboards(cities: [String]) async throws {
+    func fetchMoreLeaderboards(cities: [String], blockedUserIds: [String]) async throws {
         self.hasLoaded = false
         self.isLoading = true
         defer {
@@ -70,9 +70,9 @@ final class LeaderViewModel: ObservableObject {
         thisWeekUp.removeAll()
         allTimeDown.removeAll()
         
-        async let allUp = postManager.getTopUpsAllTime(from: cities)
-        async let thisWeek = postManager.getTopUpsThisWeek(from: cities)
-        async let allDown = postManager.getTopDownsAllTime(from: cities)
+        async let allUp = postManager.getTopUpsAllTime(from: cities, blockedUserIds: blockedUserIds)
+        async let thisWeek = postManager.getTopUpsThisWeek(from: cities, blockedUserIds: blockedUserIds)
+        async let allDown = postManager.getTopDownsAllTime(from: cities, blockedUserIds: blockedUserIds)
 
         do {
             let (up, week, down) = try await (allUp, thisWeek, allDown)

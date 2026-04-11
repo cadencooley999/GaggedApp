@@ -157,6 +157,7 @@ final class PostViewModel: ObservableObject {
             self.post?.upvotes -= 1
             userUpvoted = false
         } catch {
+            print("delete failed ")
             throw VoteError.deleteFailed
         }
     }
@@ -245,10 +246,10 @@ final class PostViewModel: ObservableObject {
         upvotedComms = CoreDataManager.shared.getPostCommentVotes(postId: postId).map({$0.commentId ?? ""})
     }
     
-    func loadInitialRootComments() async throws {
+    func loadInitialRootComments(blockedIds: [String]) async throws {
         resetRootComments()
         let hadCache = fetchCachedRoots()
-        if !hadCache {try await fetchRootComments()}
+        if !hadCache {try await fetchRootComments(blockedIds: blockedIds)}
     }
         
     func resetRootComments() {
@@ -273,7 +274,7 @@ final class PostViewModel: ObservableObject {
         return false
     }
     
-    func fetchRootComments(limit: Int = 10) async throws {
+    func fetchRootComments(limit: Int = 10, blockedIds: [String]) async throws {
         print("fetch root triggered")
         defer {commentsIsLoading = false}
         if let post = post {
@@ -281,7 +282,7 @@ final class PostViewModel: ObservableObject {
             print("hasMoreComments: ", hasMoreComments)
             if hasMoreComments {
                 commentsIsLoading = true
-                let response = try await commentManager.getRootComments(postId: post.id, limit: limit, cursor: commentsCursor)
+                let response = try await commentManager.getRootComments(postId: post.id, limit: limit, blockedUserIds: blockedIds, cursor: commentsCursor)
                 commentsCursor = response.1
                 let mapped = mapComments(comments: response.0)
                 comments.append(contentsOf: mapped)

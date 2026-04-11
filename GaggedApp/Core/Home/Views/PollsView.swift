@@ -39,42 +39,46 @@ struct PollsView: View {
 //                .ignoresSafeArea()
 //                .frame(width: windowSize.size.width, height: windowSize.size.height)
             ScrollView (showsIndicators: false) {
-                LazyVGrid(columns: pollsViewModel.columns, spacing: 0) {
-                    ForEach(pollsViewModel.polls, id: \.id) { poll in
-                        PollCard(screenType: .pollsFeed, poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
-                            .shadow(color: .black.opacity(0.12), radius: 8, y: 6)
-                            .transition(.opacity)
-                            .onTapGesture {
-                                selectedPoll = poll
-                                pollsViewModel.poll = poll
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    showPollView = true
-                                }
-                            }
-                            .onAppear {
-                                if poll.id == pollsViewModel.polls.last?.id {
-                                    Task {
-                                        try await pollsViewModel.getMorePolls(cityIds: locationManager.citiesInRange)
-                                    }
-                                }
-                            }
-                            .padding(.bottom)
-                    }
-                    if pollsViewModel.polls.count == 0 && pollsViewModel.hasLoaded{
-                        Text("No polls available for this location.")
-                            .font(.caption)
-                            .foregroundStyle(Color.theme.trashcanGray)
-                            .padding(.top, 160)
-                    }
-                    if pollsViewModel.isLoading {
-                        ProgressView()
-                            .padding(.top, pollsViewModel.polls.count == 0 ? 128 : 64)
-                    }
+                if pollsViewModel.polls.count == 0 && pollsViewModel.hasLoaded{
+                    Text("No polls available for this location.")
+                        .font(.caption)
+                        .foregroundStyle(Color.theme.trashcanGray)
+                        .padding(.top, 196 + safeArea().top)
                 }
-                .transition(.opacity)
-                .padding(.top, safeArea().top + 16)
-                .padding(.bottom, pollsViewModel.hasMore ? 800 : 104)
-                .padding(.horizontal)
+                else {
+                    VStack(spacing: 0) {
+                        LazyVGrid(columns: pollsViewModel.columns, spacing: 0) {
+                            ForEach(pollsViewModel.polls, id: \.id) { poll in
+                                PollCard(screenType: .pollsFeed, poll: poll.poll, options: poll.options, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo)
+                                    .shadow(color: .black.opacity(0.12), radius: 8, y: 6)
+                                    .transition(.opacity)
+                                    .onTapGesture {
+                                        selectedPoll = poll
+                                        pollsViewModel.poll = poll
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            showPollView = true
+                                        }
+                                    }
+                                    .onAppear {
+                                        if poll.id == pollsViewModel.polls.last?.id {
+                                            Task {
+                                                try await pollsViewModel.getMorePolls(cityIds: locationManager.citiesInRange)
+                                            }
+                                        }
+                                    }
+                                    .padding(.bottom)
+                            }
+                        }
+                        .transition(.opacity)
+                        .padding(.top, windowSize.size.width > 700 ? safeArea().top + 48 : safeArea().top + 16)
+                        .padding(.horizontal)
+                        if pollsViewModel.isLoading {
+                            ProgressView()
+                                .padding(.top, 64)
+                        }
+                    }
+                    .padding(.bottom, pollsViewModel.hasMore ? 800 : 104)
+                }
             }
             .refreshable {
                 Task {
@@ -105,3 +109,4 @@ struct PollsView: View {
 //        )
     }
 }
+

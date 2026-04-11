@@ -324,7 +324,7 @@ struct CityPickerView2: View {
         case "Polls":
             try await pollsViewModel.getInitialPolls(cityIds: citiesInRange)
         case "LeaderBoard":
-            try await leaderViewModel.fetchMoreLeaderboards(cities: citiesInRange)
+            try await leaderViewModel.fetchMoreLeaderboards(cities: citiesInRange, blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
         default:
             break
             //

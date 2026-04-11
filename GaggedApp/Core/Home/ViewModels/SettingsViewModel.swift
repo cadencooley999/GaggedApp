@@ -92,13 +92,18 @@ final class SettingsViewModel: ObservableObject {
     }
     
     func setNotifications () {
+        print("in func")
         if !notificationToggle {
+            print("in func b1")
             if hasRequestedNotis {
+                print("in func 12")
                 if hasAllowedNotifications {
+                    print("in func 13")
                     hasEnabledNotifications = true
                     NotificationManager.shared.updateFirebaseNotificationsEnabled(allowed: true)
                     getNotiState()
                 } else {
+                    print("in func 14")
                     if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
                         DispatchQueue.main.async {
                             UIApplication.shared.open(url)
@@ -109,6 +114,8 @@ final class SettingsViewModel: ObservableObject {
                 NotificationManager.shared.requestPermissionIfNeeded()
             }
         } else {
+            print("in func b2")
+
             hasEnabledNotifications = false
             NotificationManager.shared.updateFirebaseNotificationsEnabled(allowed: false)
             getNotiState()
@@ -192,7 +199,7 @@ final class SettingsViewModel: ObservableObject {
         Task {
             try await userManager.signOutUser()
             CoreDataManager.teardown()
-            UserListenerManager.shared.stopListening()
+            UserListenerManager.shared.stopUserListener()
             isLoggedIn = false
         }
     }
@@ -201,7 +208,7 @@ final class SettingsViewModel: ObservableObject {
         do {
             try await userManager.reauthAndDelete(email: userEmail, password: password)
             CoreDataManager.teardown()
-            UserListenerManager.shared.stopListening()
+            UserListenerManager.shared.stopUserListener()
             return true
         } catch {
             print(error.localizedDescription)

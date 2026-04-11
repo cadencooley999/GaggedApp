@@ -14,6 +14,8 @@ enum ScreenType {
     case profileFeed
     case savedFeed
     case inspectionFeed
+    case leaderBoard
+    case homeFeed
 }
 
 struct PollCard: View {
@@ -337,7 +339,7 @@ struct PollCard: View {
         }
         Task {
             postViewModel.commentsIsLoading = true
-            try await postViewModel.loadInitialRootComments()
+            try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             postViewModel.commentsIsLoading = false
         }
     }

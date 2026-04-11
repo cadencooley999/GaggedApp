@@ -21,6 +21,7 @@ struct ReportSheetView: View {
         "Harassment or Hate",
         "Inappropriate Content",
         "Spam or Scam",
+        "Against Community Guidelines",
         "Another Reason"
     ]
     
@@ -28,6 +29,7 @@ struct ReportSheetView: View {
         "Harassment or Hate": .hate,
         "Inappropriate Content": .inapropriate,
         "Spam or Scam": .spam,
+        "Against Community Guidelines": .communityGuidlines,
         "Another Reason": .other
     ]
 

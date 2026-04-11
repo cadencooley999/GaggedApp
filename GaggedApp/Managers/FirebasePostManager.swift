@@ -42,9 +42,8 @@ class FirebasePostManager {
         Firestore.firestore().collection("Posts")
     }
     
-    func uploadPost(post: PostModel) async throws {
+    func uploadPost(post: PostModel, postRef: DocumentReference) async throws {
         
-        let postRef = postsCollection.document()
         let postId = postRef.documentID
         
         let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!
@@ -69,10 +68,19 @@ class FirebasePostManager {
                 "100" : false
             ],
             "titlePrefixes" : generatePrefixes(from: post.name),
-            "isHidden" : false,
+            "isHidden" : true,
             "reportCount" : 0,
             "reportReasons" : [],
-            "expiresAt" : Timestamp(date: threeMonthsFromNow)
+            "expiresAt" : Timestamp(date: threeMonthsFromNow),
+            "uploadState" : "uploading"
+        ])
+    }
+    
+    func finalizePost(postId: String, imageUrl: String) async throws {
+        try await postsCollection.document(postId).updateData([
+            "imageUrl" : imageUrl,
+            "uploadState" : "complete",
+            "isHidden":false
         ])
     }
     
@@ -87,6 +95,7 @@ class FirebasePostManager {
     func fetchHomeFeed(
         cityIds: [String],
         pageSize: Int = 10,
+        blockedUserIds: [String],
         cursor: FeedCursor?
     ) async throws -> FeedResponse {
         
@@ -115,16 +124,16 @@ class FirebasePostManager {
         }
 
         let posts = decodePosts(from: dict)
-        let cursor = dict["nextCursor"] as? [String: Any]
+        let filteredPosts = posts.filter { !blockedUserIds.contains($0.authorId) }
         let nextCursor = decodeCursor(from: dict)
-        
+
         return FeedResponse(
-            posts: posts,
+            posts: filteredPosts,
             nextCursor: nextCursor
         )
     }
     
-    func fetchGlobalFeed(pageSize: Int = 10, cursor: ProperPostsCursor?) async throws -> ([PostModel], ProperPostsCursor?) {        
+    func fetchGlobalFeed(pageSize: Int = 10, blockedUserIds: [String] = [], cursor: ProperPostsCursor?) async throws -> ([PostModel], ProperPostsCursor?) {        
         var query: Query = postsCollection.order(by: "createdAt").order(by: "id").whereField("isHidden", isEqualTo: false).limit(to: pageSize + 1)
         
         if let cursor {
@@ -153,10 +162,11 @@ class FirebasePostManager {
             )
         }()
         
-        return (posts, nextCursor)
+        let filteredPosts = posts.filter { !blockedUserIds.contains($0.authorId) }
+        return (filteredPosts, nextCursor)
     }
     
-    func getPosts(from cityIDs: [String]) async throws -> [PostModel] {
+    func getPosts(from cityIDs: [String], blockedUserIds: [String] = []) async throws -> [PostModel] {
         guard !cityIDs.isEmpty else { return [] }
         
         // Break into batches of 10 per Firestore rule
@@ -183,7 +193,7 @@ class FirebasePostManager {
             }
         }
         
-        return allPosts
+        return allPosts.filter { !blockedUserIds.contains($0.authorId) }
     }
 
     func getPost(id: String) async throws -> PostModel {
@@ -196,6 +206,7 @@ class FirebasePostManager {
     func getUserPosts(
         uid: String,
         pageSize: Int = 15,
+        blockedUserIds: [String] = [],
         cursor: ProperPostsCursor?
     ) async throws -> ([PostModel], ProperPostsCursor?) {
 
@@ -232,7 +243,8 @@ class FirebasePostManager {
             )
         }()
 
-        return (posts, nextCursor)
+        let filteredPosts = posts.filter { !blockedUserIds.contains($0.authorId) }
+        return (filteredPosts, nextCursor)
     }
     
     
@@ -272,7 +284,7 @@ class FirebasePostManager {
         try await ref.updateData(["downvotes": FieldValue.increment(Int64(-1)), "expiresAt":threeMonthsFromNow])
     }
     
-    func getAllPostsNearby(cities: [String]) async throws -> [PostModel] {
+    func getAllPostsNearby(cities: [String], blockedUserIds: [String] = []) async throws -> [PostModel] {
         guard !cities.isEmpty else { return [] }
         var results: [PostModel] = []
         var seen: Set<String> = []
@@ -292,37 +304,24 @@ class FirebasePostManager {
                 }
             }
         }
-        return results
+        return results.filter { !blockedUserIds.contains($0.authorId) }
     }
     
-    func getPostsFromSearch(keyword: String, allPostsNearby: [PostModel]) -> [PostModel] {
-
-        return allPostsNearby.filter { post in
+    func getPostsFromSearch(keyword: String, allPostsNearby: [PostModel], blockedUserIds: [String] = []) -> [PostModel] {
+        let results = allPostsNearby.filter { post in
             var lower = keyword.lowercased()
-            
             lower = lower.replacingOccurrences(of: "#", with: "")
-            
-//            // 1. Match post name
-//            if post.name.lowercased().contains(lower) { return true }
-//            
-//            if post.authorName.lowercased().contains(lower) { return true }
-//            
-//            if post.tags.contains(where: { $0.lowercased().contains(lower) }) {
-//                return true
-//            }
-            if post.keywords.contains(lower) {return true}
-            
-            // 3. Match city names
+            if post.keywords.contains(lower) { return true }
             let cities = CityManager.shared.getCities(ids: post.cityIds)
             if cities.contains(where: { $0.city.lowercased().contains(lower) }) {
                 return true
             }
-            
             return false
         }
+        return results.filter { !blockedUserIds.contains($0.authorId) }
     }
     
-    func getGlobalPostsFromSearch(keyword: String) async throws -> [PostModel] {
+    func getGlobalPostsFromSearch(keyword: String, blockedUserIds: [String] = []) async throws -> [PostModel] {
         let tokens = keyword
             .lowercased()
             .split(separator: " ")
@@ -347,10 +346,10 @@ class FirebasePostManager {
             return tokens.allSatisfy { tokenSet.contains($0) }
         }
         
-        return filtered
+        return filtered.filter { !blockedUserIds.contains($0.authorId) }
     }
     
-    func getPostsFromIds(ids: [String]) async throws -> [PostModel] {
+    func getPostsFromIds(ids: [String], blockedUserIds: [String] = []) async throws -> [PostModel] {
         guard !ids.isEmpty else { return [] }
 
         let pagedIds = Array(ids.prefix(100))
@@ -368,10 +367,10 @@ class FirebasePostManager {
             }
         }
 
-        return posts
+        return posts.filter { !blockedUserIds.contains($0.authorId) }
     }
 
-    func getTopUpsThisWeek(from cityIDs: [String]) async throws -> ([PostModel], [Int]) {
+    func getTopUpsThisWeek(from cityIDs: [String], blockedUserIds: [String] = []) async throws -> ([PostModel], [Int]) {
         guard !cityIDs.isEmpty else { return ([], []) }
         let week = weekId()
         let chunks = cityIDs.chunked(into: 10)
@@ -385,7 +384,6 @@ class FirebasePostManager {
                     let snap = try await Firestore.firestore()
                         .collection("WeeklyPostStats")
                         .whereField("week", isEqualTo: week)
-                        .whereField("isHidden", isEqualTo: false)
                         .whereField("cityIds", arrayContainsAny: chunk)
                         .order(by: "upvotes", descending: true)
                         .limit(to: 5)
@@ -414,16 +412,17 @@ class FirebasePostManager {
             .sorted { $0.upvotes > $1.upvotes }
             .prefix(5)
         
-        let top5Ups: [Int] = top5.map {$0.upvotes}
         let postIds = top5
             .filter { $0.upvotes > 0 }
             .map { $0.postId }
-
-        return try await (getPostsFromIds(ids: postIds), top5Ups)
+        let upvotesById = Dictionary(uniqueKeysWithValues: top5.map { ($0.postId, $0.upvotes) })
+        let posts = try await getPostsFromIds(ids: postIds, blockedUserIds: blockedUserIds)
+        let filteredUps = posts.compactMap { upvotesById[$0.id] }
+        return (posts, filteredUps)
     }
 
     
-    func getTopUpsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
+    func getTopUpsAllTime(from cityIDs: [String], blockedUserIds: [String] = []) async throws -> [PostModel] {
         guard !cityIDs.isEmpty else { return [] }
         let chunks = cityIDs.chunked(into: 10)
 
@@ -437,7 +436,7 @@ class FirebasePostManager {
                         .whereField("cityIds", arrayContainsAny: chunk)
                         .whereField("isHidden", isEqualTo: false)
                         .order(by: "upvotes", descending: true)
-                        .limit(to: 20)
+                        .limit(to: 5)
                         .getDocuments()
 
                     return snap.documents.map { self.mapItem(item: $0) }
@@ -458,15 +457,16 @@ class FirebasePostManager {
             }
         )
 
-        return deduped.values
+        let result = deduped.values
             .filter { $0.upvotes > 0 }
             .sorted { $0.upvotes > $1.upvotes }
             .prefix(5)
             .map { $0 }
+        return result.filter { !blockedUserIds.contains($0.authorId) }
     }
 
   
-    func getTopDownsAllTime(from cityIDs: [String]) async throws -> [PostModel] {
+    func getTopDownsAllTime(from cityIDs: [String], blockedUserIds: [String] = []) async throws -> [PostModel] {
         guard !cityIDs.isEmpty else { return [] }
         let chunks = cityIDs.chunked(into: 10)
 
@@ -480,7 +480,7 @@ class FirebasePostManager {
                         .whereField("cityIds", arrayContainsAny: chunk)
                         .whereField("isHidden", isEqualTo: false)
                         .order(by: "downvotes", descending: true)
-                        .limit(to: 20)
+                        .limit(to: 5)
                         .getDocuments()
 
                     return snap.documents.map { self.mapItem(item: $0) }
@@ -501,20 +501,21 @@ class FirebasePostManager {
             }
         )
 
-        return deduped.values
+        let result = deduped.values
             .filter { $0.downvotes > 0 }
             .sorted { $0.downvotes > $1.downvotes }
             .prefix(5)
             .map { $0 }
+        return result.filter { !blockedUserIds.contains($0.authorId) }
     }
 
     
-    func getUpvotedPostsFromCoreData(cursor: Date?) async throws -> ([PostModel], Date?) {
+    func getUpvotedPostsFromCoreData(cursor: Date?, blockedUserIds: [String] = []) async throws -> ([PostModel], Date?) {
         let votedposts = CoreDataManager.shared.fetchUpvotedPostIds(pageSize: 10, cursor: cursor)
         print("Voted posts: ", votedposts)
         let nextCursor = votedposts.1
         let posts = try await getPostsFromIds(ids: votedposts.0)
-        return (posts, nextCursor)
+        return (posts.filter { !blockedUserIds.contains($0.authorId) }, nextCursor)
     }
     
     func incrementReports(postId: String) async throws {
@@ -730,6 +731,3 @@ class FirebasePostManager {
         }
     }
 }
-
-
-

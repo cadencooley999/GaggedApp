@@ -27,6 +27,7 @@ struct ProfileView: View {
     @EnvironmentObject var vm: ProfileViewModel
     @EnvironmentObject var postViewModel: PostViewModel
     @EnvironmentObject var windowSize: WindowSize
+    @EnvironmentObject var homeViewModel: HomeViewModel
 //    @EnvironmentObject var eventViewModel: EventViewModel
     @Environment(\.colorScheme) var scheme
     
@@ -40,6 +41,7 @@ struct ProfileView: View {
     @Binding var showReportView: Bool
     @Binding var preReportInfo: preReportModel?
     @Binding var showInspectionView: Bool
+    @Binding var postScreenType: ScreenType
     
     @State var showSearchSheet: Bool = false
     @State private var previousTabIndex: Int = 0
@@ -47,17 +49,24 @@ struct ProfileView: View {
     @Namespace private var profilePicNamespace
     @State var isPressed: Bool = false
     
+    private var isPadLike: Bool { windowSize.size.width >= 700 }
+    private var headerTopPadding: CGFloat { isPadLike ? 24 : 0 }
+    private var sectionTopPadding: CGFloat { isPadLike ? 24 : 8 }
+    private var contentTopInset: CGFloat { isPadLike ? 228 : 132 }
+    private var placeholderMinHeight: CGFloat { max(0, windowSize.size.height - contentTopInset - 60) }
+    private var placeholderYOffset: CGFloat { isPadLike ? -200 : -120 }
+    
     let topTabs: [TopTab] = [TopTab(title: "Posts"), TopTab(title: "Comments"), TopTab(title: "Polls"), TopTab(title: "Upvoted"), TopTab(title: "Saved")]
     
     @State var currentIndex: Int = 0
     
     @State var selectedTopTab: TopTab = TopTab(title: "Posts")
     
-    private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8)
-    ]
+    private var commentColumns: [GridItem] {
+        windowSize.size.width > 700
+        ? [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        : [GridItem(.flexible(), spacing: 12)]
+    }
     
     var body: some View {
         ZStack {
@@ -72,21 +81,36 @@ struct ProfileView: View {
                 VStack(spacing: 0){
                     VStack(spacing: 0) {
                         header
-                            .frame(height: 55)
+                            .frame(height: isPadLike ? 64 : 55)
                             .padding(.horizontal)
                         profileInfo
                             .frame(maxWidth: .infinity)
                             .padding()
+                            .padding(.bottom, isPadLike ? 12 : 0)
                     }
+                    .padding(.top, headerTopPadding)
                     .background(Color.theme.background)
                     sectionPicker
+                        .padding(.top, sectionTopPadding)
                         .frame(maxWidth: .infinity)
-                        .background(Rectangle().fill(Color.theme.background).mask(LinearGradient(stops: [
-                            .init(color: .black.opacity(1), location: 0.1),
-                            .init(color: .black.opacity(0.9), location: 0.5),
-                            .init(color: .black.opacity(0.7), location: 0.7),
-                                .init(color: .black.opacity(0), location: 1.0)
-                        ], startPoint: .top, endPoint: .bottom)))
+                        .background(alignment: .top) {
+                            Rectangle()
+                                .fill(Color.theme.background)
+                                .mask(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .black.opacity(1.0), location: 0.0),
+                                            .init(color: .black.opacity(0.97), location: 0.4),
+                                            .init(color: .black.opacity(0.9), location: 0.5),
+                                            .init(color: .black.opacity(0.85), location: 0.55),
+                                            .init(color: .black.opacity(0.0), location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(height: isPadLike ? 88 : 52)
+                        }
                 }
                 Spacer()
             }
@@ -96,9 +120,12 @@ struct ProfileView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: showImageOverlay)
         .task {
+            if windowSize.size.width > 700 {
+                vm.postColumns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+            }
             try? await vm.loadUserInfoIfNeeded()
             if !vm.hasLoadedPosts {
-                await vm.loadInitialUserPosts()
+                await vm.loadInitialUserPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             }
         }
         .sheet(isPresented: $showSearchSheet) {
@@ -145,9 +172,9 @@ struct ProfileView: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .glassEffect(.regular.interactive())
-                .opacity(vm.loadedUser.isAdmin ? 1 : 0)
+                .opacity(isAdmin ? 1 : 0)
                 .onTapGesture {
-                    if vm.loadedUser.isAdmin {
+                    if isAdmin {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showInspectionView = true
                         }
@@ -168,11 +195,11 @@ struct ProfileView: View {
     }
     
     var profileInfo: some View {
-        HStack(spacing: 12){
+        HStack(spacing: isPadLike ? 20 : 12){
             ZStack {
-                ProfilePic(address: chosenProfileImageAddress, size: 88)
+                ProfilePic(address: chosenProfileImageAddress, size: isPadLike ? 110 : 88)
             }
-            .frame(width: 88, height: 88)
+            .frame(width: isPadLike ? 110 : 88, height: isPadLike ? 110 : 88)
             .scaleEffect(isPressed ? 0.9 : 1)
             .onLongPressGesture(
                 minimumDuration: 0.4,
@@ -188,13 +215,13 @@ struct ProfileView: View {
                     })
                 }
             )
-            VStack(spacing: 12){
+            VStack(spacing: isPadLike ? 16 : 12){
                 HStack {
                     Text("@\(vm.username)")
                         .font(.title3)
                         .fontWeight(.semibold)
                         .truncationMode(.tail)
-                    if vm.loadedUser.isAdmin {
+                    if isAdmin {
                         Text("Admin")
                             .font(.subheadline.italic())
                             .foregroundStyle(Color.theme.darkBlue)
@@ -202,7 +229,7 @@ struct ProfileView: View {
                     }
                     Spacer()
                 }
-                HStack(spacing: 16){
+                HStack(spacing: isPadLike ? 24 : 16){
                     HStack {
                         Text("\(vm.loadedUser.numPosts)")
                             .font(.body)
@@ -214,7 +241,7 @@ struct ProfileView: View {
                         .frame(width: 0.5, height: 20)
                         .foregroundStyle(Color.theme.lightGray)
                     HStack {
-                        Text("\(vm.loadedUser.garma)")
+                        Text("\(vm.loadedUser.gags)")
                             .font(.body)
                             .fontWeight(.bold)
                         Text("Gags")
@@ -231,256 +258,15 @@ struct ProfileView: View {
     
     var postSection: some View {
         ScrollView(showsIndicators: false)  {
-            if !vm.userPosts.isEmpty {
-                LazyVGrid (columns: columns, spacing: 8){
-                    ForEach(vm.userPosts) { post in
-                        TinyPostView(post: post, width: windowSize.size.width / 3 - 16, height: (windowSize.size.width / 3 - 16)*(5/4))
-                            .onTapGesture {
-                                selectedPost = post
-                                postViewModel.setPost(postSelection: post)
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showPostView = true
-                                }
-                                Task {
-                                    postViewModel.commentsIsLoading = true
-                                    try await postViewModel.loadInitialRootComments()
-                                    postViewModel.commentsIsLoading = false
-                                }
-                            }
-                            .onAppear {
-                                if post.id == vm.userPosts.last?.id {
-                                    Task {
-                                        await vm.getUserPosts()
-                                    }
-                                }
-                            }
-                    }
-                }
-                .transition(.opacity)
-                .padding(.top, 132)
-                .padding(.bottom, vm.hasMoreUserPosts ? 300 : 0)
-            }
-            if !vm.hasLoadedPosts {
-                VStack {
-                    ProgressView()
-                }
-                .frame(maxWidth: windowSize.size.width)
-                .padding(.top, vm.userPosts.isEmpty ? 180 : -80)
-            } else if vm.userPosts.isEmpty {
-                VStack {
-                    Image(systemName: "camera")
-                        .frame(width: 100, height: 100)
-                    Text("No posts yet...")
-                        .font(.title3)
-                }
-                .frame(maxWidth: windowSize.size.width)
-                .padding(.top, 132)
-            }
-        }
-        .refreshable {
-            await vm.loadInitialUserPosts()
-        }
-    }
-    
-    var commentSection: some View {
-        ScrollView(showsIndicators: false)  {
-            if !vm.userComments.isEmpty  {
-                LazyVStack(spacing: 12) {
-                    ForEach(vm.userComments) { comment in
-                        HStack(alignment: .top, spacing: 10) {
-                            // Card
-                            HStack(alignment: .top, spacing: 6) {
-                                ProfilePic(address: chosenProfileImageAddress, size: 30)
-                                    .padding(.leading, 6)
-                                    .padding(.top, 12)
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    // Username
-                                    Text(username)
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(Color.primary)
-
-                                    // Date
-                                    Text(vm.formatFirestoreDate(comment.createdAt))
-                                        .font(.footnote)
-                                        .foregroundStyle(Color.secondary)
-                                        .fontWeight(.regular)
-                                    
-                                    HStack {
-                                        Text(comment.message)
-                                            .padding(12)
-                                            .background(Color.theme.lightGray.opacity(0.15))
-                                            .cornerRadius(8)
-                                        
-                                        HStack(spacing: 2){
-                                            Text("\(comment.upvotes)")
-                                            Image(systemName: "arrow.up")
-                                                .foregroundStyle(Color.theme.darkBlue)
-                                        }
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                    }
-                                    .padding(.top, 8)
-                                }
-                                .padding(.vertical, 12)
-                                .padding(.horizontal)
-                            }
-                            .background(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(.ultraThinMaterial)
+            if vm.hasLoadedPosts {
+                if !vm.userPosts.isEmpty {
+                    LazyVGrid (columns: vm.postColumns, spacing: 8){
+                        ForEach(vm.userPosts) { post in
+                            TinyPostView(
+                                post: post,
+                                width: (windowSize.size.width - CGFloat((vm.postColumns.count + 1) * 8)) / CGFloat(max(1, vm.postColumns.count)),
+                                height: ((windowSize.size.width - CGFloat((vm.postColumns.count + 1) * 8)) / CGFloat(max(1, vm.postColumns.count))) * (5/4)
                             )
-                            .shadow(color: .black.opacity(0.10), radius: 8, x: 6)
-
-                            Spacer()
-                            
-                            Button {
-                                Task {
-                                    let post = try await postViewModel.fetchPost(postId: comment.postId)
-                                    selectedPost = post
-                                    postViewModel.setPost(postSelection: post)
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        showPostView = true
-                                    }
-                                    postViewModel.commentsIsLoading = true
-                                    try await postViewModel.loadInitialRootComments()
-                                    postViewModel.commentsIsLoading = false
-                                }
-                            } label: {
-                                Image(systemName: "arrow.right")
-                                    .font(.title3)
-                                    .foregroundStyle(Color.theme.darkBlue)
-                                    .padding(8)
-                                    .frame(width: 36, height: 36)
-                                    .contentShape(Rectangle())
-                                    .glassEffect(.regular.interactive())
-                            }
-                        }
-                        .onAppear {
-                            if comment.id == vm.userComments.last?.id {
-                                Task {
-                                    await vm.getUserComments()
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.top, 132)
-                .padding(.horizontal)
-                .padding(.bottom, vm.hasMoreUserComments ? 300 : 0)
-            }
-            if !vm.hasLoadedComments {
-                VStack {
-                    ProgressView()
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, vm.userComments.isEmpty ? 180 : -80)
-            } else if vm.userComments.isEmpty {
-                VStack {
-                    Image(systemName: "ellipsis.message")
-                        .frame(width: 100, height: 100)
-                    Text("No comments yet...")
-                        .font(.title3)
-                }
-                .frame(maxWidth: windowSize.size.width)
-                .padding(.top, 132)
-            }
-        }
-        .task {
-            if !vm.hasLoadedComments {
-                await vm.loadInitialUserComments()
-            }
-        }
-        .refreshable {
-            await vm.loadInitialUserComments()
-        }
-    }
-    
-    var pollSection: some View {
-        ScrollView(showsIndicators: false)  {
-            if !vm.userPolls.isEmpty {
-                LazyVStack (spacing: 8){
-                    ForEach(vm.userPolls, id: \.compositeID) { poll in
-                        MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, screenType: .profileFeed)
-                            .padding()
-                            .onTapGesture {
-                                if poll.options.count > 0 {
-                                    vm.clearOptions(for: poll.id)
-                                } else {
-                                    Task {
-                                        try await vm.loadOptions(for: poll.id)
-                                    }
-                                }
-                            }
-                            .onAppear {
-                                if poll.id == vm.userPolls.last?.id {
-                                    Task {
-                                        await vm.getUserPolls()
-                                    }
-                                }
-                            }
-                    }
-                }
-                .padding(.top, 132)
-                .padding(.bottom, vm.hasMoreUserPolls ? 300 : 0)
-            }
-            if !vm.hasLoadedPolls {
-                VStack {
-                    ProgressView()
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, vm.userPolls.isEmpty ? 180 : -80)
-            } else if vm.userPolls.isEmpty {
-                VStack {
-                    Image(systemName: "chart.bar.horizontal.page")
-                        .frame(width: 100, height: 100)
-                    Text("No Polls Yet")
-                        .font(.title3)
-                }
-                .frame(maxWidth: windowSize.size.width)
-                .padding(.top, 132)
-            }
-        }
-        .task {
-            if !vm.hasLoadedPolls {
-                await vm.loadInitialUserPolls()
-            }
-        }
-        .refreshable {
-            PollCache.shared.clearCache()
-            await vm.loadInitialUserPolls()
-        }
-    }
-    
-    var savedSection: some View {
-        ScrollView(showsIndicators: false)  {
-            if !vm.hasLoadedSaved {
-                VStack {
-                    ProgressView()
-                }
-                .padding(.top, 180)
-                .frame(maxWidth: .infinity)
-            } else {
-                VStack(alignment: .leading, spacing: 0){
-                    if vm.savedPosts.isEmpty && vm.savedPolls.isEmpty {
-                        VStack {
-                            Image(systemName: "bookmark")
-                                .frame(width: 100, height: 100)
-                            Text("No saved posts or events yet...")
-                                .font(.title3)
-                        }
-                        .frame(maxWidth: windowSize.size.width)
-                    }
-                    if !vm.savedPosts.isEmpty {
-                        Text("Posts")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .padding(8)
-                            .padding(.bottom, 8)
-                    }
-                    LazyVGrid (columns: columns, spacing: 8){
-                        ForEach(vm.savedPosts) { post in
-                            TinyPostView(post: post, width: windowSize.size.width / 3 - 16, height: (windowSize.size.width / 3 - 16)*(5/4))
                                 .onTapGesture {
                                     selectedPost = post
                                     postViewModel.setPost(postSelection: post)
@@ -489,7 +275,289 @@ struct ProfileView: View {
                                     }
                                     Task {
                                         postViewModel.commentsIsLoading = true
-                                        try await postViewModel.loadInitialRootComments()
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        postViewModel.commentsIsLoading = false
+                                    }
+                                }
+                                .onAppear {
+                                    if post.id == vm.userPosts.last?.id {
+                                        Task {
+                                            await vm.getUserPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        }
+                                    }
+                                }
+                        }
+                    }
+                    .transition(.opacity)
+                    .padding(.top, contentTopInset)
+                    .padding(.bottom, vm.hasMoreUserPosts ? 300 : 0)
+                } else {
+                    VStack {
+                        Spacer(minLength: 0)
+                        Image(systemName: "camera")
+                            .frame(width: 100, height: 100)
+                        Text("No posts yet...")
+                            .font(.title3)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: placeholderMinHeight)
+                    .offset(y: placeholderYOffset)
+                    .padding(.top, contentTopInset - 16)
+                }
+            } else {
+                VStack {
+                    Spacer(minLength: 0)
+                    ProgressView()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: placeholderMinHeight)
+                .offset(y: placeholderYOffset)
+            }
+        }
+        .refreshable {
+            await vm.loadInitialUserPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+        }
+    }
+    
+    var commentSection: some View {
+        ScrollView(showsIndicators: false)  {
+            if vm.hasLoadedComments {
+                if !vm.userComments.isEmpty  {
+                    LazyVGrid(columns: commentColumns, spacing: 12) {
+                        ForEach(vm.userComments) { comment in
+                            HStack(alignment: .top, spacing: isPadLike ? 20 : 14) {
+                                VStack {
+                                    HStack(alignment: .top, spacing: 6) {
+                                        ProfilePic(address: chosenProfileImageAddress, size: 30)
+                                            .padding(.leading, 6)
+                                            .padding(.top, 12)
+
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(username)
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundStyle(Color.primary)
+
+                                            Text(vm.formatFirestoreDate(comment.createdAt))
+                                                .font(.footnote)
+                                                .foregroundStyle(Color.secondary)
+                                                .fontWeight(.regular)
+                                            HStack {
+                                                Text(comment.message)
+                                                    .padding(12)
+                                                    .background(Color.theme.lightGray.opacity(0.15))
+                                                    .cornerRadius(8)
+                                                HStack(spacing: 2){
+                                                    Text("\(comment.upvotes)")
+                                                    Image(systemName: "arrow.up")
+                                                        .foregroundStyle(Color.theme.darkBlue)
+                                                }
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            }
+                                            .padding(.top, 8)
+                                        }
+
+                                        Spacer(minLength: 0)
+                                    }
+                                    .padding(.vertical, 12)
+                                    .padding(.horizontal)
+                                }
+                                .frame(
+                                    maxWidth: ((windowSize.size.width - 32 - (isPadLike ? 12 : 0)) / CGFloat(isPadLike ? 2 : 1)) * (isPadLike ? 0.86 : 0.90),
+                                    alignment: .leading
+                                )
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(.ultraThinMaterial)
+                                )
+                                .shadow(color: .black.opacity(0.10), radius: 8, x: 6)
+
+                                Button {
+                                    Task {
+                                        let post = try await postViewModel.fetchPost(postId: comment.postId)
+                                        selectedPost = post
+                                        postViewModel.setPost(postSelection: post)
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            showPostView = true
+                                        }
+                                        postViewModel.commentsIsLoading = true
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        postViewModel.commentsIsLoading = false
+                                    }
+                                } label: {
+                                    Image(systemName: "arrow.right")
+                                        .font(.title3)
+                                        .foregroundStyle(Color.theme.darkBlue)
+                                        .padding(8)
+                                        .frame(width: 36, height: 36)
+                                        .contentShape(Rectangle())
+                                        .glassEffect(.regular.interactive())
+                                }
+                            }
+                            .onAppear {
+                                if comment.id == vm.userComments.last?.id {
+                                    Task {
+                                        await vm.getUserComments(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.top, contentTopInset)
+                    .padding(.horizontal)
+                    .padding(.bottom, vm.hasMoreUserComments ? 300 : 0)
+                } else {
+                    VStack {
+                        Spacer(minLength: 0)
+                        Image(systemName: "ellipsis.message")
+                            .frame(width: 100, height: 100)
+                        Text("No comments yet...")
+                            .font(.title3)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: placeholderMinHeight)
+                    .offset(y: placeholderYOffset)
+                    .padding(.top, contentTopInset - 16)
+                }
+            } else {
+                VStack {
+                    Spacer(minLength: 0)
+                    ProgressView()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: placeholderMinHeight)
+                .offset(y: placeholderYOffset)
+            }
+        }
+        .task {
+            if !vm.hasLoadedComments {
+                await vm.loadInitialUserComments(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+            }
+        }
+        .refreshable {
+            await vm.loadInitialUserComments(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+        }
+    }
+    
+    var pollSection: some View {
+        ScrollView(showsIndicators: false)  {
+            if vm.hasLoadedPolls {
+                if !vm.userPolls.isEmpty {
+                    LazyVStack (spacing: 8){
+                        ForEach(vm.userPolls, id: \.compositeID) { poll in
+                            MiniPollView(poll: poll, selectedPost: $selectedPost, showPostView: $showPostView, showPollView: $showPollView, showReportView: $showReportView, preReportInfo: $preReportInfo, screenType: .profileFeed)
+                                .padding()
+                                .onTapGesture {
+                                    if poll.options.count > 0 {
+                                        vm.clearOptions(for: poll.id)
+                                    } else {
+                                        Task {
+                                            try await vm.loadOptions(for: poll.id)
+                                        }
+                                    }
+                                }
+                                .onAppear {
+                                    if poll.id == vm.userPolls.last?.id {
+                                        Task {
+                                            await vm.getUserPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        }
+                                    }
+                                }
+                        }
+                    }
+                    .padding(.top, contentTopInset)
+                    .padding(.bottom, vm.hasMoreUserPolls ? 300 : 0)
+                } else if vm.userPolls.isEmpty {
+                    VStack {
+                        Spacer(minLength: 0)
+                        Image(systemName: "chart.bar.horizontal.page")
+                            .frame(width: 100, height: 100)
+                        Text("No Polls Yet")
+                            .font(.title3)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: placeholderMinHeight)
+                    .offset(y: placeholderYOffset)
+                    .padding(.top, contentTopInset)
+                }
+            } else {
+                VStack {
+                    Spacer(minLength: 0)
+                    ProgressView()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: placeholderMinHeight)
+                .offset(y: placeholderYOffset)
+            }
+        }
+        .task {
+            if !vm.hasLoadedPolls {
+                await vm.loadInitialUserPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+            }
+        }
+        .refreshable {
+            PollCache.shared.clearCache()
+            await vm.loadInitialUserPolls(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+        }
+    }
+    
+    var savedSection: some View {
+        ScrollView(showsIndicators: false)  {
+            if !vm.hasLoadedSaved {
+                VStack {
+                    Spacer(minLength: 0)
+                    ProgressView()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: placeholderMinHeight)
+                .offset(y: placeholderYOffset)
+            } else {
+                VStack(alignment: .leading, spacing: 0){
+                    if vm.savedPosts.isEmpty && vm.savedPolls.isEmpty {
+                        VStack {
+                            Spacer(minLength: 0)
+                            Image(systemName: "bookmark")
+                                .frame(width: 100, height: 100)
+                            Text("No saved posts or polls yet...")
+                                .font(.title3)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: placeholderMinHeight)
+                        .offset(y: placeholderYOffset - 10)
+                    }
+                    if !vm.savedPosts.isEmpty {
+                        Text("Posts")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .padding(8)
+                            .padding(.bottom, 8)
+                    }
+                    LazyVGrid (columns: vm.postColumns, spacing: 8){
+                        ForEach(vm.savedPosts) { post in
+                            TinyPostView(
+                                post: post,
+                                width: (windowSize.size.width - CGFloat((vm.postColumns.count + 1) * 8)) / CGFloat(max(1, vm.postColumns.count)),
+                                height: ((windowSize.size.width - CGFloat((vm.postColumns.count + 1) * 8)) / CGFloat(max(1, vm.postColumns.count))) * (5/4)
+                            )
+                                .onTapGesture {
+                                    selectedPost = post
+                                    postViewModel.setPost(postSelection: post)
+                                    postScreenType = .savedFeed
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showPostView = true
+                                    }
+                                    Task {
+                                        postViewModel.commentsIsLoading = true
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                                         postViewModel.commentsIsLoading = false
                                     }
                                 }
@@ -518,89 +586,102 @@ struct ProfileView: View {
                         }
                     }
                 }
-                .padding(.top, 132)
+                .padding(.top, contentTopInset)
             }
         }
         .refreshable {
             Task {
                 PollCache.shared.clearCache()
-                try await vm.refreshSaved()
+                try await vm.refreshSaved(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             }
         }
         .task {
             Task {
-                try await vm.loadSavedIfNeeded()
+                try await vm.loadSavedIfNeeded(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             }
         }
     }
     
     var upvotedSection: some View {
         ScrollView(showsIndicators: false)  {
-            if !vm.upvotedPosts.isEmpty {
-                LazyVGrid (columns: columns, spacing: 8){
-                    ForEach(vm.upvotedPosts) { post in
-                        TinyPostView(post: post, width: windowSize.size.width / 3 - 16, height: (windowSize.size.width / 3 - 16)*(5/4))
-                            .onTapGesture {
-                                selectedPost = post
-                                postViewModel.setPost(postSelection: post)
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showPostView = true
-                                }
-                                Task {
-                                    postViewModel.commentsIsLoading = true
-                                    try await postViewModel.loadInitialRootComments()
-                                    postViewModel.commentsIsLoading = false
-                                }
-                            }
-                            .onAppear {
-                                if post.id == vm.upvotedPosts.last?.id {
+            if vm.hasLoadedUpvoted {
+                if !vm.upvotedPosts.isEmpty {
+                    LazyVGrid (columns: vm.postColumns, spacing: 8){
+                        ForEach(vm.upvotedPosts) { post in
+                            TinyPostView(
+                                post: post,
+                                width: (windowSize.size.width - CGFloat((vm.postColumns.count + 1) * 8)) / CGFloat(max(1, vm.postColumns.count)),
+                                height: ((windowSize.size.width - CGFloat((vm.postColumns.count + 1) * 8)) / CGFloat(max(1, vm.postColumns.count))) * (5/4)
+                            )
+                                .onTapGesture {
+                                    selectedPost = post
+                                    postViewModel.setPost(postSelection: post)
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showPostView = true
+                                    }
                                     Task {
-                                        await vm.getUpvotedPosts()
+                                        postViewModel.commentsIsLoading = true
+                                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                                        postViewModel.commentsIsLoading = false
                                     }
                                 }
-                            }
-                            .transition(.opacity)
+                                .onAppear {
+                                    if post.id == vm.upvotedPosts.last?.id {
+                                        Task {
+                                            await vm.getUpvotedPosts()
+                                        }
+                                    }
+                                }
+                                .transition(.opacity)
+                        }
                     }
+                    .padding(.top, contentTopInset)
+                    .padding(.bottom, vm.hasMoreUpvotedPosts ? 300 : 0)
+                } else if vm.upvotedPosts.isEmpty {
+                    VStack {
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up")
+                            .frame(width: 100, height: 100)
+                        Text("Haven't seen anything you like?")
+                            .font(.title3)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: placeholderMinHeight)
+                    .offset(y: placeholderYOffset)
+                    .padding(.top, contentTopInset - 10)
                 }
-                .padding(.top, 132)
-                .padding(.bottom, vm.hasMoreUpvotedPosts ? 300 : 0)
-            }
-            if !vm.hasLoadedUpvoted {
+            } else {
                 VStack {
+                    Spacer(minLength: 0)
                     ProgressView()
+                    Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, vm.upvotedPosts.isEmpty ? 180 : -80)
-            } else if vm.upvotedPosts.isEmpty {
-                VStack {
-                    Image(systemName: "arrow.up")
-                        .frame(width: 100, height: 100)
-                    Text("Haven't seen anything you like?")
-                        .font(.title3)
-                }
-                .padding(.top, 132)
+                .frame(minHeight: placeholderMinHeight)
+                .offset(y: placeholderYOffset)
             }
         }
         .refreshable {
-            await vm.loadInitialUpvotedPosts()
+            await vm.loadInitialUpvotedPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
         }
         .task {
             if !vm.hasLoadedUpvoted {
-                await vm.loadInitialUpvotedPosts()
+                await vm.loadInitialUpvotedPosts(blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
             }
         }
     }
     
     var sectionPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 20) {
+            HStack(spacing: isPadLike ? 28 : 20) {
                 ForEach(topTabs, id: \.self) { tab in
                     Text(tab.title)
                         .font(.body.weight(.medium))
                         .foregroundStyle(
                             selectedTopTab.title == tab.title ? Color.theme.background : Color.theme.accent
                         )
-                        .padding(.vertical, 10)
+                        .padding(.vertical, isPadLike ? 12 : 8)
                         .padding(.horizontal, 12)
                         .onTapGesture {
                             print("TAPPED")
@@ -614,7 +695,6 @@ struct ProfileView: View {
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 8)
         }
         .scrollClipDisabled()
     }
@@ -790,12 +870,17 @@ struct ImageOverlay: View {
     @EnvironmentObject var profVM: ProfileViewModel
     
     @AppStorage("chosenProfileImageAddress") var chosenProfileImageAddress: String = ""
+    @AppStorage("isAdmin") var isAdmin: Bool = false
 
     var imageAddress: String
     @State var addresses: [String] = loadSequentialImages(prefix: "ProfPic")
     
     @State private var newChosenAddress: String? = nil
     @Binding var showImageOverlay: Bool
+    
+    private var isPadLike: Bool { UIScreen.main.bounds.width >= 700 }
+    private var gridItemSize: CGFloat { isPadLike ? 110 : 75 }
+    private var gridSpacing: CGFloat { isPadLike ? 30 : 22 }
     
     var namespace: Namespace.ID
     
@@ -844,28 +929,24 @@ struct ImageOverlay: View {
                 
                 VStack {
                     // MARK: - Selected Image Preview
-                    ProfilePic(address: newChosenAddress ?? imageAddress, size: 200)
+                    ProfilePic(address: newChosenAddress ?? imageAddress, size: isPadLike ? 220 : 200)
                         .padding(.bottom, 24)
                     
-                    HStack {
-                        Spacer()
-                        LazyVGrid(columns: columns) {
-                            ForEach(addresses, id: \.self) { address in
-                                ProfilePic(address: address, size: 75)
-                                    .opacity(newChosenAddress == address ? 0.6 : 1)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(newChosenAddress == address ? Color.theme.darkBlue : .clear, lineWidth: 3)
-                                    )
-                                    .onTapGesture {
-                                        newChosenAddress = address
-                                    }
-                                    .padding(.bottom, 8)
-                            }
+                    LazyVGrid(columns: columns, spacing: gridSpacing) {
+                        ForEach(addresses, id: \.self) { address in
+                            ProfilePic(address: address, size: gridItemSize)
+                                .opacity(newChosenAddress == address ? 0.6 : 1)
+                                .overlay(
+                                    Circle()
+                                        .stroke(newChosenAddress == address ? Color.theme.darkBlue : .clear, lineWidth: 3)
+                                )
+                                .onTapGesture {
+                                    newChosenAddress = address
+                                }
+                                .padding(.bottom, 8)
                         }
-                        Spacer()
                     }
-                    .padding(.horizontal)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 10)
                 }
                 
@@ -896,9 +977,10 @@ struct ImageOverlay: View {
             .padding(.horizontal)
         }
         .onAppear {
-            if profVM.loadedUser.isAdmin {
+            if isAdmin {
                 addresses.append("AdminProfPic")
             }
+            columns = [GridItem(.adaptive(minimum: gridItemSize, maximum: gridItemSize), spacing: gridSpacing)]
         }
     }
 }
