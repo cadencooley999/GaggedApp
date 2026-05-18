@@ -110,13 +110,22 @@ struct PollCard: View {
                                                 optionId: newChoice
                                             )
                                             withAnimation(.easeInOut(duration: 0.3)) {
+                                                print(
+                                                    "ANIMATION 1"
+                                                )
                                                 optionChose = newChoice
                                             }
                                             withAnimation(.easeInOut(duration: 0.25)) {
+                                                print(
+                                                    "ANIMATION 2"
+                                                )
                                                 totalVotes += 1
                                                 optionsVotes[newChoice, default: 0] += 1
                                             }
-                                            refreshPoll(pollId: poll.id, optionToAdd: option.id, optionToSubtract: "")
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                print("refreshing")
+                                                refreshPoll(pollId: poll.id, optionToAdd: option.id, optionToSubtract: "")
+                                            }
                                         }
                                     } else if previousChoice == newChoice {
                                         if !isUpdating {
@@ -126,13 +135,22 @@ struct PollCard: View {
                                                 optionId: newChoice
                                             )
                                             withAnimation(.easeInOut(duration: 0.3)) {
+                                                print(
+                                                    "ANIMATION 1"
+                                                )
                                                 optionChose = ""
                                             }
                                             withAnimation(.easeInOut(duration: 0.25)) {
+                                                print(
+                                                    "ANIMATION 2"
+                                                )
                                                 totalVotes -= 1
                                                 optionsVotes[newChoice, default: 0] = max(0, optionsVotes[newChoice, default: 0] - 1)
                                             }
-                                            refreshPoll(pollId: poll.id, optionToAdd: "", optionToSubtract: option.id)
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                print("refreshing")
+                                                refreshPoll(pollId: poll.id, optionToAdd: "", optionToSubtract: option.id)
+                                            }
                                         }
                                     } else {
                                         if !isUpdating {
@@ -142,18 +160,32 @@ struct PollCard: View {
                                                 oldOptionId: previousChoice,
                                                 newOptionId: newChoice
                                             )
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                if let index = options.firstIndex(where: { $0.id == previousChoice }) {
-                                                    optionChose = newChoice
+                                            if screenType == .pollsFeed {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    print(
+                                                        "ANIMATION 1"
+                                                    )
+                                                    if let index = options.firstIndex(where: { $0.id == previousChoice }) {
+                                                        optionChose = newChoice
+                                                    }
+                                                }
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    print(
+                                                        "ANIMATION 2"
+                                                    )
+                                                    optionsVotes[previousChoice, default: 0] = max(0, optionsVotes[previousChoice, default: 0] - 1)
+                                                    optionsVotes[newChoice, default: 0] += 1
+                                                }
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0) {
+                                                    if let prev = options.first(where: { $0.id == previousChoice }) {
+                                                        print("refreshing")
+                                                        refreshPoll(pollId: poll.id, optionToAdd: option.id, optionToSubtract: prev.id)
+                                                    }
                                                 }
                                             }
-                                            withAnimation(.easeInOut(duration: 0.25)) {
-                                                optionsVotes[previousChoice, default: 0] = max(0, optionsVotes[previousChoice, default: 0] - 1)
-                                                optionsVotes[newChoice, default: 0] += 1
-                                            }
-                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                            else {
                                                 if let prev = options.first(where: { $0.id == previousChoice }) {
-                                                    optionChose = newChoice
+                                                    print("refreshing")
                                                     refreshPoll(pollId: poll.id, optionToAdd: option.id, optionToSubtract: prev.id)
                                                 }
                                             }
@@ -251,21 +283,18 @@ struct PollCard: View {
                                 }
                             } label: {
                                 HStack(spacing: 8) {
-                                    if !linkedPostDeleted {
-                                        Image(systemName: "arrow.up.right.square")
-                                        Text("View Linked Post")
-                                    } else {
-                                        Image(systemName: "arrow.up.right.square")
-                                        Text("Post Unavailable")
-                                    }
+                                    Image(systemName: "arrow.up.right.square")
+                                    Text(linkedPostDeleted ? "Post Unavailable" : "View Linked Post")
+                                        .lineLimit(1)                 // keep it on one line
+                                        .truncationMode(.tail)        // truncate if needed
+                                        .minimumScaleFactor(0.95)     // optional: slightly shrink before truncating
+                                        .allowsTightening(true)       // optional: tighter kerning before truncation
                                 }
                                 .font(.callout.weight(.semibold))
                                 .foregroundStyle(Color.theme.darkBlue)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 10)
-                                .background(
-                                    Capsule().fill(Color.theme.lightBlue.opacity(0.15))
-                                )
+                                .background(Capsule().fill(Color.theme.lightBlue.opacity(0.15)))
                             }
                             .buttonStyle(.plain)
                         }
@@ -276,6 +305,7 @@ struct PollCard: View {
                             Image(systemName: "person.3.fill").font(.footnote)
                             Text("Total: \(poll.totalVotes)")
                                 .font(.footnote)
+                                .monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 10)
@@ -290,7 +320,6 @@ struct PollCard: View {
         .onChange(of: options.map(\.voteCount)) {
             optionChose = pollsViewModel.getPollChoice(pollId: poll.id)
             
-            // Set UI States for animation
             optionsVotes = [:]
             for opt in options {
                 optionsVotes[opt.id] = opt.voteCount

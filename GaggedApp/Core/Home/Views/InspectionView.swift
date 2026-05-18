@@ -169,8 +169,13 @@ struct InspectionView: View {
                 .foregroundStyle(Color.theme.darkRed)
             if reasons.isEmpty {
                 Text("Image Flagger or No Flags")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption.bold())
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.theme.lightGray.opacity(0.2))
+                    )
             } else {
                 ForEach(reasons, id: \.self) { reason in
                     Text(reason)

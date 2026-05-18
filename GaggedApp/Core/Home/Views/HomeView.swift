@@ -56,13 +56,13 @@ struct HomeView: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 8)
                                     .transition(.opacity)
-                                if homeViewModel.feedStore.loadedPosts.count == 0 && homeViewModel.hasLoaded{
+                                if homeViewModel.feedStore.loadedPosts.count == 0 && homeViewModel.hasLoaded {
                                     Text("No posts available for this location")
                                         .font(.caption)
                                         .foregroundStyle(Color.theme.trashcanGray)
                                         .padding(.top, 160)
                                 }
-                                if homeViewModel.isLoading {
+                                if homeViewModel.isLoading && !homeViewModel.hasLoaded {
                                     ProgressView()
                                         .padding(.top, homeViewModel.feedStore.loadedPosts.count == 0 ? 128 : 64)
                                 }

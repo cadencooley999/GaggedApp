@@ -239,7 +239,7 @@ struct CityPickerView3: View {
 
             Spacer()
 
-            if city.city == settingsViewModel.nameMentionCity?.city {
+            if city.id == settingsViewModel.nameMentionCity?.id {
                 Image(systemName: "checkmark")
                     .font(.body)
                     .foregroundStyle(Color.theme.darkBlue)

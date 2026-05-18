@@ -51,8 +51,7 @@ struct PostView: View {
     @State var thingHeldId: String = ""
     @State var isNamePressed: Bool = false
     @State var isCommentTextFieldFocusedState: Bool = false
-    @State var voteInFlight: Bool = false
-    
+    @State var voteInFlight: Bool = false    
     @Binding var screenType: ScreenType
     
     @Namespace var commentBubbles
@@ -67,7 +66,7 @@ struct PostView: View {
                         VStack(spacing: 0) {
                             VStack(spacing: -12){
                                 ZStack {
-                                    postImage(url: post.imageUrl, maxHeight: 400)
+                                    postImage(url: post.imageUrl, maxHeight: 400, windowHeight: windowSize.size.height)
                                         .cornerRadius(30)
                                         .padding(.horizontal)
                                         .padding(.top, 12)
@@ -109,10 +108,12 @@ struct PostView: View {
                     }
                     .onChange(of: highlightedCommentId) {
                         if let id = highlightedCommentId {
-                            withAnimation(.easeInOut(duration: 0.4)) {
-                                proxy.scrollTo("\(id)", anchor: .center)
+                            Task { @MainActor in
+                                await Task.yield()
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo("\(id)", anchor: .center)
+                                }
                             }
-                            print("Scrolling too")
                         }
                     }
                     .onChange(of: isCommentTextFieldFocused) {

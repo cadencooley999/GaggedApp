@@ -36,6 +36,8 @@ final class AddPostViewModel: ObservableObject {
     @Published var selectedTags: [TagModel] = []
     @Published var currentNewContent: NewContent = .post
     @Published var linkedPost: PostModel? = nil
+    @Published var currentlyUploadingContentId: String = ""
+    @Published var gaveGags: Bool = false
     
     let storageManager = StorageManager.shared
     let postManager = FirebasePostManager.shared
@@ -87,47 +89,77 @@ final class AddPostViewModel: ObservableObject {
     }
     
     func uploadNewPost(text: String, name: String, image: UIImage, cityIds: [String]) async throws -> Bool {
-        do {
+            try Task.checkCancellation()
             let authorId = userId
             let imageId = UUID().uuidString
             let postRef = Firestore.firestore().collection("Posts").document()
-            
+                    
             let post = PostModel(id: "", text: text, name: name, imageUrl: "", createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, tags: selectedTags.map({$0.title}), keywords: [], upvotes: 0, downvotes: 0)
             
             try await postManager.uploadPost(post: post, postRef: postRef)
+        
+            currentlyUploadingContentId = postRef.documentID
+        
+            try Task.checkCancellation()
             
             let urlString = try await uploadWithRetries(call: {
                 try await self.storageManager.uploadImage(image, imageId: imageId, userId: self.userId, postId: postRef.documentID)
             })
+        
+            try Task.checkCancellation()
             
             if let urlString = urlString {
-                try await postManager.finalizePost(postId: postRef.documentID, imageUrl: urlString)
+                try await postManager.finalizePost(postId: postRef.documentID, userId: userId, imageUrl: urlString)
                 print("Post Finalized")
             }
             print(post.name, "postname")
+            
+            try Task.checkCancellation()
+            
             UserManager.shared.addGags(userId: userId, contributionType: .post)
+        
+            gaveGags = true
             return true
-        } catch {
-            print("❌ Failed with error: \(error.localizedDescription)")
-            return false
-        }
     }
     
     func uploadNewPoll(title: String, context: String, options: [String], cityId: String, linkedPostId: String, linkedPostName: String) async throws -> Bool {
-        do {
+            try Task.checkCancellation()
+            let pollRef = Firestore.firestore().collection("Polls").document()
             let newPoll = PollModel(id: "", authorId: userId, authorName: username, authorPicUrl: profImageUrl, title: title, context: context, linkedPostId: linkedPostId, linkedPostName: linkedPostName, optionsCount: options.count, totalVotes: 0, createdAt: Timestamp(date: Date()), cityId: cityId, keywords: [])
             var pollOptions: [PollOption] = []
             for (index, option) in options.enumerated() {
                 pollOptions.append(PollOption(id: "", text: option, voteCount: 0, index: index))
             }
-            try await pollManager.addPoll(poll: newPoll, options: pollOptions)
+            try await pollManager.addPoll(poll: newPoll, options: pollOptions, pollRef: pollRef)
+            currentlyUploadingContentId = pollRef.documentID
+            try Task.checkCancellation()
             UserManager.shared.addGags(userId: userId, contributionType: .poll)
+            gaveGags = true
             return true
+    }
+    
+    func cancelUpload() async throws {
+        if currentlyUploadingContentId != "" {
+            do {
+                if currentNewContent == .post {
+                    try await postManager.deletePost(postId: currentlyUploadingContentId)
+                    if gaveGags {
+                        UserManager.shared.removeGags(userId: userId, ContributionType: .post)
+                    }
+                } else {
+                    try await pollManager.deletePoll(pollId: currentlyUploadingContentId)
+                    if gaveGags {
+                        UserManager.shared.removeGags(userId: userId, ContributionType: .poll)
+                    }
+                }
+            } catch {
+                print("Error cleaning up: \(error)")
+            }
+        } else {
+            print("Cancelled before any upload")
         }
-        catch {
-            print(error)
-            return false
-        }
+        currentlyUploadingContentId = ""
+        gaveGags = false    
     }
         
     private func setImage(selection: PhotosPickerItem?) {

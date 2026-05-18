@@ -54,6 +54,7 @@ struct miniPostImage: View {
 struct postImage: View {
     let url: String
     let maxHeight: CGFloat
+    let windowHeight: CGFloat
     @State var isLoading: Bool = true
     @State var isFailed: Bool = false
     
@@ -70,7 +71,7 @@ struct postImage: View {
                         Rectangle()
                             .fill(Color.red)
                     }
-                    .frame(height: 350)
+                    .frame(height: 350 + (windowHeight*0.1))
                 }
                 .onSuccess { _ in
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -79,7 +80,7 @@ struct postImage: View {
                 }
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: maxHeight)
+                .frame(maxWidth: .infinity, maxHeight: maxHeight + (windowHeight*0.1))
                 .clipped()
                 .onAppear {
                     isLoading = true
@@ -97,7 +98,7 @@ struct postImage: View {
                     ProgressView()
                         .scaledToFill()
                 }
-                .frame(height: 350)
+                .frame(height: 350 + (windowHeight*0.1))
             }
         }
     }

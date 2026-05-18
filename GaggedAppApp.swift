@@ -148,9 +148,20 @@ struct AuthenticatedRootView: View {
             TabHomeView()
                 .onAppear {
                     windowSize.size = geo.size
+                    print("SIZE APPEARS")
                 }
-                .onChange(of: geo.size) {
-                    windowSize.size = $0
+                .onChange(of: geo.size) { newSize in
+                    let widthChanged = abs(windowSize.size.width - newSize.width) > 20
+                    let heightChanged = abs(windowSize.size.height - newSize.height)
+
+                    let isKeyboardChange =
+                        !widthChanged &&
+                        heightChanged > 150
+
+                    if !isKeyboardChange {
+                        windowSize.size = newSize
+                    }
+                    print("SIZE CHANGED TAB HOME")
                 }
                 .environmentObject(homeViewModel)
                 .environmentObject(addPostViewModel)

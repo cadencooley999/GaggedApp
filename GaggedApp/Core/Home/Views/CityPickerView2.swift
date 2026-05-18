@@ -235,7 +235,6 @@ struct CityPickerView2: View {
     func cityTapped(city: City) {
         // set user location to city chosen
         Task {
-            homeViewModel.isLoading = true
             print("setting range")
             let citiesInRange = locationManager.setLocation(city)
             try await resetNecessary(citiesInRange: citiesInRange)
@@ -272,7 +271,7 @@ struct CityPickerView2: View {
 
             Spacer()
 
-            if city.city == locationManager.selectedCity?.city {
+            if city.id == locationManager.selectedCity?.id {
                 Image(systemName: "checkmark")
                     .font(.body)
                     .foregroundStyle(Color.theme.darkBlue)
@@ -320,6 +319,7 @@ struct CityPickerView2: View {
         leaderViewModel.reset()
         switch selectedTab.title {
         case "Home":
+            print("Resetting home")
             await homeViewModel.loadInitialPostFeed(cityIds: citiesInRange)
         case "Polls":
             try await pollsViewModel.getInitialPolls(cityIds: citiesInRange)

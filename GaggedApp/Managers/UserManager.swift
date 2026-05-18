@@ -359,5 +359,16 @@ class UserManager {
             }
         }
     }
+    
+    func removeGags(userId: String, ContributionType: ContributionType) {
+        Task {
+            guard !userId.isEmpty else { return }
+            if ContributionType == .post {
+                try await usersCollection.document(userId).updateData(["gags": FieldValue.increment(Int64(-10))])
+            } else {
+                try await usersCollection.document(userId).updateData(["gags": FieldValue.increment(Int64(-8))])
+            }
+        }
+    }
 }
 

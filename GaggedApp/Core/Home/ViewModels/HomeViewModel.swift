@@ -144,7 +144,9 @@ class HomeViewModel: ObservableObject {
     }
     
     func loadMorePostFeed(cityIds: [String]) async {
+        print("isLoading? :", isLoading)
         guard !isLoading, hasMore else { return }
+        hasLoaded = false
         isLoading = true
         defer {isLoading = false;
             if isLogged {hasLoaded = true}}

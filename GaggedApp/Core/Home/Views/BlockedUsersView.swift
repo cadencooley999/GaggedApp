@@ -37,10 +37,8 @@ struct BlockedUsersView: View {
             }
         }
         .task {
-            if !profileViewModel.blockedUsersLoaded {
-                Task {
-                    try await profileViewModel.getBlockedUsers()
-                }
+            Task {
+                try await profileViewModel.getBlockedUsers()
             }
         }
     }

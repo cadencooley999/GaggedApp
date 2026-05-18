@@ -35,8 +35,7 @@ class PollManager {
         Firestore.firestore().collection("Polls")
     }
     
-    func addPoll(poll: PollModel, options: [PollOption]) async throws {
-        let pollRef = pollCollection.document()
+    func addPoll(poll: PollModel, options: [PollOption], pollRef: DocumentReference) async throws {
         let pollId = pollRef.documentID
         
         let threeMonthsFromNow = Calendar.current.date(byAdding: .month, value: 3, to: .now)!

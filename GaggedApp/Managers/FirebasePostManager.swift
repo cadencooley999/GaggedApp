@@ -42,6 +42,8 @@ class FirebasePostManager {
         Firestore.firestore().collection("Posts")
     }
     
+    let db = Firestore.firestore()
+    
     func uploadPost(post: PostModel, postRef: DocumentReference) async throws {
         
         let postId = postRef.documentID
@@ -75,13 +77,25 @@ class FirebasePostManager {
             "uploadState" : "uploading"
         ])
     }
-    
-    func finalizePost(postId: String, imageUrl: String) async throws {
-        try await postsCollection.document(postId).updateData([
-            "imageUrl" : imageUrl,
-            "uploadState" : "complete",
-            "isHidden":false
-        ])
+
+    func finalizePost(postId: String, userId: String, imageUrl: String) async throws {
+
+        let userRef = db.collection("Users").document(userId)
+        let postRef = db.collection("Posts").document(postId)
+
+        let batch = db.batch()
+
+        batch.updateData([
+            "numPosts": FieldValue.increment(Int64(1))
+        ], forDocument: userRef)
+
+        batch.updateData([
+            "imageUrl": imageUrl,
+            "uploadState": "complete",
+            "isHidden": false
+        ], forDocument: postRef)
+
+        try await batch.commit()
     }
     
     func deletePost(postId: String) async throws {

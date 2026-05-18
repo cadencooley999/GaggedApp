@@ -373,7 +373,7 @@ struct ProfileView: View {
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                                         .fill(.ultraThinMaterial)
                                 )
-                                .shadow(color: .black.opacity(0.10), radius: 8, x: 6)
+                                .shadow(color: .black.opacity(0.08), radius: 6, x: 4)
 
                                 Button {
                                     Task {

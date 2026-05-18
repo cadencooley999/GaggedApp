@@ -302,6 +302,7 @@ struct OneSearch: View {
                                             .transition(.opacity)
                                             .onTapGesture {
                                                 print("Little Post Tapped")
+                                                UIApplication.shared.endEditing()
                                                 selectedPost = post
                                                 postViewModel.setPost(postSelection: post)
                                                 postScreenType = .searchFeed

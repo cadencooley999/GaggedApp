@@ -280,7 +280,7 @@ struct CityPickerView: View {
 
             Spacer()
 
-            if city.city == locationManager.selectedCity?.city {
+            if city.id == locationManager.selectedCity?.id {
                 Image(systemName: "checkmark")
                     .font(.body)
                     .foregroundStyle(Color.theme.darkBlue)

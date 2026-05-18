@@ -49,6 +49,7 @@ struct AddPostView: View {
     @State var successful: Bool? = nil
     @State var isLoading: Bool = false
     @State var showCitySearch: Bool = false
+    @State var showCancelPopup: Bool = false
 //    @State var isEvent: Bool = false
 
     @State var eventDate: Date = Date()
@@ -62,6 +63,8 @@ struct AddPostView: View {
     @State var continuation: CheckedContinuation<UIImage,Never>? = nil
     @State var showSheet: Bool = false
     @State var showPostPicker: Bool = false
+    
+    @State var uploadTask: Task<Void, Never>?
 
     @State var photoSelected: Bool = false
     @State var selectedPhoto: UIImage? = nil
@@ -411,6 +414,10 @@ struct AddPostView: View {
             TagSheet(showTagSheet: $showTagSheet)
                 .presentationDetents([.medium])
         }
+        
+        if showCancelPopup {
+            cancelUploadPopup(showCancel: $showCancelPopup, isLoading: $isLoading, uploadTask: $uploadTask, showAddPostView: $showAddPostView)
+        }
     }
     
     var captionSection: some View {
@@ -665,11 +672,15 @@ struct AddPostView: View {
                     }
                     else {
                         Button {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                UIApplication.shared.endEditing()
-                                photoSelected = false
-                                selectedPhoto = nil
-                                
+                            if isLoading {
+                                showCancelPopup = true
+                            } else {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    UIApplication.shared.endEditing()
+                                    photoSelected = false
+                                    selectedPhoto = nil
+                                    
+                                }
                             }
                         } label: {
                             Image(systemName: "chevron.left")
@@ -978,29 +989,41 @@ struct AddPostView: View {
     func submit() {
         if vm.currentNewContent == .post {
             if captionText.trimmingCharacters(in: .whitespacesAndNewlines) != "" && vm.pickedImage != nil && !vm.selectedCities.isEmpty && nameText != "" {
-                Task {
+                uploadTask = Task {
                     if let photo = selectedPhoto {
-                        isLoading = true
-                        let success = try await vm.uploadNewPost(text: captionText, name: nameText, image: photo, cityIds: vm.selectedCities.map({$0.id}))
-                        withAnimation(.easeInOut) {
-                            successful = success
-                            print("Found success")
-                            isLoading = false
-                        }
-                        if successful == true {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
-                                successful = nil
-                                print("loading more")
-                                Task {
-                                    await homeVm.loadInitialPostFeed(cityIds: locationManager.citiesInRange)
-                                }
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    showAddPostView = false
-                                    selectedTab = TabBarItem(iconName: "HomeIcon", title: "Home")
-                                }
-                                clearTextFields()
-                            })
-                            try await profileViewModel.loadMoreUserInfo()
+                        do {
+                            isLoading = true
+                            let success = try await vm.uploadNewPost(text: captionText, name: nameText, image: photo, cityIds: vm.selectedCities.map({$0.id}))
+                            withAnimation(.easeInOut) {
+                                successful = success
+                                print("Found success")
+                                isLoading = false
+                            }
+                            if successful == true {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
+                                    successful = nil
+                                    print("loading more")
+                                    Task {
+                                        await homeVm.loadInitialPostFeed(cityIds: locationManager.citiesInRange)
+                                    }
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showAddPostView = false
+                                        selectedTab = TabBarItem(iconName: "HomeIcon", title: "Home")
+                                    }
+                                    clearTextFields()
+                                })
+                                try await profileViewModel.loadMoreUserInfo()
+                            }
+                        } catch is CancellationError {
+                            do {
+                                
+                                try await vm.cancelUpload()
+                                print("Post cancelled")
+                            } catch {
+                                print("Cleanup failed", error)
+                            }
+                        } catch {
+                            print("Some other error \(error)")
                         }
                     }
                 }
@@ -1010,28 +1033,41 @@ struct AddPostView: View {
             let hasOptions = !(pollOptions.contains(where: { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) == ""}))
             if pollTitle != "" && hasOptions {
                 if let city = locationManager.selectedCity {
-                    Task {
-                        isLoading = true
-                        let success = try await vm.uploadNewPoll(title: pollTitle, context: pollContext, options: pollOptions.map({$0.text}), cityId: city.id, linkedPostId: vm.linkedPost?.id ?? "", linkedPostName: vm.linkedPost?.name ?? "")
-                        withAnimation(.easeInOut) {
-                            successful = success
-                            print("Found success")
-                            isLoading = false
-                        }
-                        if successful == true {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
-                                successful = nil
-                                Task {
-                                    try await pollsViewModel.getInitialPolls(cityIds: locationManager.citiesInRange)
-                                }
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    showAddPostView = false
-                                    selectedTab = TabBarItem(iconName: "PollIcon", title: "Polls")
-                                }
-                                clearTextFields()
-                            })
-                            try await profileViewModel.loadMoreUserInfo()
+                    uploadTask = Task {
+                        do {
+                            isLoading = true
+                            let success = try await vm.uploadNewPoll(title: pollTitle, context: pollContext, options: pollOptions.map({$0.text}), cityId: city.id, linkedPostId: vm.linkedPost?.id ?? "", linkedPostName: vm.linkedPost?.name ?? "")
+                            withAnimation(.easeInOut) {
+                                successful = success
+                                print("Found success")
+                                isLoading = false
+                            }
+                            if successful == true {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
+                                    successful = nil
+                                    Task {
+                                        try await pollsViewModel.getInitialPolls(cityIds: locationManager.citiesInRange)
+                                    }
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showAddPostView = false
+                                        selectedTab = TabBarItem(iconName: "PollIcon", title: "Polls")
+                                    }
+                                    clearTextFields()
+                                })
+                                try await profileViewModel.loadMoreUserInfo()
 
+                            }
+                        }
+                        catch is CancellationError {
+                            do {
+                                try await vm.cancelUpload()
+                                print("Cancelled poll")
+                            } catch {
+                                print("Cleanup failed", error)
+                            }
+                        }
+                        catch {
+                            print(error)
                         }
                     }
                 }
@@ -1270,4 +1306,78 @@ struct CropImageView: View {
         }
     }
 
+}
+
+struct cancelUploadPopup: View {
+    
+    @EnvironmentObject var addPostViewModel: AddPostViewModel
+    
+    @Binding var showCancel: Bool
+    @Binding var isLoading: Bool
+    @Binding var uploadTask: Task<Void, Never>?
+    @Binding var showAddPostView: Bool
+    
+    var body: some View {
+        ZStack {
+            // Dimmed background with interactive dismissal
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeInOut) { showCancel = false }
+                }
+
+            // Glass container
+            VStack(spacing: 16) {
+                // Title + subtitle
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Cancel Upload?")
+                        .font(.title3.weight(.semibold))
+                        .foregroundColor(Color.theme.accent)
+
+                    Text("By leaving this page you will stop your content from uploading.")
+                        .font(.footnote)
+                        .foregroundColor(Color.theme.gray)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Buttons row
+                HStack(spacing: 12) {
+                    
+                    // Delete (glassy, emphasized)
+                    Button(action: {
+                        uploadTask?.cancel()
+                        isLoading = false
+                        showCancel = false
+                        showAddPostView = false
+                    }) {
+                        Text("Cancel")
+                            .font(.body.weight(.semibold))
+                            .foregroundColor(Color.theme.background)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.theme.darkRed)
+                            .cornerRadius(20)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Cancel (glassy)
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) { showCancel = false }
+                    }) {
+                        Text("Wait")
+                            .font(.body.weight(.medium))
+                            .foregroundColor(Color.theme.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.theme.lightGray.opacity(0.2))
+                            .cornerRadius(20)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+            .glassEffect(in: .rect(cornerRadius: 30))
+            .padding(.horizontal, 32)
+        }
+    }
 }

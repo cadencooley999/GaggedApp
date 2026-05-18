@@ -23,6 +23,7 @@ final class OnboardingViewModel: ObservableObject {
     let storageManager = StorageManager.shared
     
     func signInEmailAndPassword(email: String, password: String, username: String, imageAddress: String = "ProfPic1") async throws {
+        print(email, username)
         let newUser = try await UserManager.shared.signUpUser(email: email, password: password)
         try await UserManager.shared.createUser(user: newUser, usernm: username, imageAddress: imageAddress)
         userEmail = newUser.email

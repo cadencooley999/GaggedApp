@@ -10,74 +10,6 @@ import Foundation
 import FirebaseFirestore
 import Kingfisher
 
-//struct MiniPostView: View {
-//
-//    let post: PostModel
-//    let width: CGFloat?
-//
-//    @EnvironmentObject var homeViewModel: HomeViewModel
-//
-//    var body: some View {
-//        ZStack {
-//            ZStack {
-//                Rectangle()
-//                    .fill(Color.theme.darkBlue.opacity(0.1))
-//                    .frame(height: post.height)
-//                    .frame(maxWidth: width != nil ? width : .infinity)
-//                VStack {
-//                    GeometryReader { geo in
-//                        miniPostImage(url: post.imageUrl, height: geo.size.height, width: geo.size.width)
-//                    }
-//                    .clipShape(RoundedRectangle(cornerRadius: 25))
-//                    .padding(8)
-//                    Spacer()
-//                }
-//
-//            }
-//            VStack {
-//                Spacer()
-//                HStack(spacing: 2){
-//                    Text("\(post.name)")
-//                        .font(.caption)
-//                        .fontWeight(.semibold)
-//                        .foregroundColor(Color.theme.accent)
-//                        .padding(6)
-//                        .background(Color.theme.background.opacity(1).cornerRadius(10))
-//                        .frame(height: 20)
-//                    Spacer()
-//                    HStack(spacing: 2) {
-//                        HStack (spacing: 0) {
-//                            Text("\(post.upvotes)")
-//                                .fontWeight(.bold)
-//                                .font(.caption)
-//                                .foregroundColor(Color.theme.accent)
-//                            Image(systemName: "arrow.up")
-//                                .foregroundStyle(Color.theme.darkBlue)
-//                                .fontWeight(.bold)
-//                        }
-//                        HStack (spacing: 0){
-//                            Text("\(post.downvotes)")
-//                                .font(.caption)
-//                                .fontWeight(.bold)
-//                                .foregroundColor(Color.theme.accent)
-//                            Image(systemName: "arrow.down")
-//                                .foregroundStyle(Color.theme.darkRed)
-//                                .fontWeight(.bold)
-//                        }
-//                    }
-//                    .padding(4)
-//                    .background(Color.theme.background.opacity(1).cornerRadius(10))
-//                    .frame(height: 20)
-//                }
-//            }
-//            .padding(10)
-//            .padding(.vertical, 4)
-//            .frame(maxWidth: width != nil ? width : .infinity)
-//        }
-//        .frame(height: post.height)
-//        .clipShape(RoundedRectangle(cornerRadius: 25))
-//    }
-//}
 struct MiniPostView: View {
 
     var post: PostModel
@@ -241,7 +173,7 @@ struct MiniPostView: View {
                 }
             }
         }
-        .frame(height: post.height)
+        .frame(height: post.height + (windowSize.size.height * 0.075))
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius)
