@@ -134,70 +134,77 @@ struct OnboardingView: View {
     }
     
     var welcome: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let iconSize = min(224, max(118, width * 0.42))
+            let titleSize = min(48, max(36, width * 0.10))
+            let contentSpacing = min(28, max(28, width * 0.2))
 
-            // App Logo
-            Image("AppImage")
-                .resizable()
-                .frame(width: 200, height: 200)
-                .cornerRadius(22)
+            VStack(spacing: 24) {
+                Spacer()
 
-            // App Title
-            Text("Gagged")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+                // Centered top content with proportional sizing
+                VStack(spacing: contentSpacing) {
+                    Image("AppImage")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                        .rotationEffect(.degrees(-4))
+                        .padding(.bottom, 4)
 
-            // Welcome Header
-            Text("Welcome")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .padding(.top)
+                    Text("Gagged")
+                        .font(.system(size: titleSize, weight: .heavy))
+                        .foregroundColor(Color.theme.accent)
+                        .kerning(-0.03 * titleSize)
+                        .padding(.bottom, 4)
 
-            // Blurb (placeholder)
-            Text("Built for gossipers and nosy internet slueths. Stay updated on your pool.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+                    HStack(spacing: 10) {
+                        Chip(label: "gossip", style: .blue)
+                        Chip(label: "sleuthing", style: .gold)
+                        Chip(label: "your pool", style: .blue)
+                    }
+
+                    Text("the nosy app for keeping up with everyone around you")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundColor(Color.theme.accent.opacity(0.45))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .frame(maxWidth: min(320, width * 0.8))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, max(24, width * 0.06))
+
+                Spacer()
+
+                // Keep the bottom items unchanged
+                Text("Already have an account? Log in here")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.theme.darkBlue)
+                    .padding(.horizontal)
+                    .onTapGesture {
+                        hasOnboarded = true
+                    }
+
+                // Get Started Button (unchanged)
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        welcomed = true
+                    }
+                }) {
+                    Text("Get Started")
+                        .font(.headline)
+                        .foregroundColor(Color.theme.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            Capsule()
+                                .fill(Color.theme.darkBlue)
+                        )
+                }
                 .padding(.horizontal, 32)
-            
-//            VStack(alignment: .leading){
-//                Text("Rule 1: NO posting straight guys")
-//                Text("Rule 2: NO posting girls")
-//                Text("Rule 3: NO dropping addresses and phone numbers")
-//            }
-//            .font(.body)
-//            .foregroundColor(.secondary)
-//            .padding(32)
-
-            Spacer()
-            
-            Text("Already have an account? Log in here")
-                .font(.subheadline)
-                .foregroundStyle(Color.theme.darkBlue)
-                .padding(.horizontal)
-                .onTapGesture {
-                    hasOnboarded = true
-                }
-
-            // Get Started Button
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    welcomed = true
-                }
-            }) {
-                Text("Get Started")
-                    .font(.headline)
-                    .foregroundColor(Color.theme.background)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        Capsule()
-                            .fill(Color.theme.darkBlue)
-                    )
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 32)
-            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
     

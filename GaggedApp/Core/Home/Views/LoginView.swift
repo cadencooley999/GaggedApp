@@ -32,154 +32,160 @@ struct LoginView: View {
     @FocusState var emailPassFocused: emailPassFocus?
     
     var body: some View {
-        ZStack {
-            Background()
-                .ignoresSafeArea()
-                .onTapGesture {
-                    UIApplication.shared.endEditing()
-                }
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false){
-                    VStack(spacing: 24) {
-                        Spacer()
-
-                        // App Icon
-                        Image("AppImage")
-                            .resizable()
-                            .frame(width: 172, height: 172)
-                            .cornerRadius(22)
-                        
-                            .padding(.vertical)
-
-                        // App Title
-                        Text("Gagged")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-
-                        Text("Login failed, please try again")
-                            .font(.footnote)
-                            .foregroundStyle(Color.theme.darkRed)
-                            .opacity(failure ? 1 : 0)
-
-                        // Email
-                        TextField("Email", text: $email)
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .padding()
-                            .glassEffect()
-                            .id("email")
-                            .focused($emailPassFocused, equals: .email)
-                            .submitLabel(.next)
-                            .onSubmit {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    emailPassFocused = .password
-                                }
-                            }
-
-                        // Password with eye
-                        VStack {
-                            HStack {
-                                ZStack {
-                                    TextField("Password", text: $password)
-                                        .focused($emailPassFocused, equals: .password)
-                                        .opacity(showPassword ? 1 : 0)
-                                    SecureField("Password", text: $password)
-                                        .focused($emailPassFocused, equals: .password)
-                                        .opacity(showPassword ? 0 : 1)
-                                }
-                                .submitLabel(.done)
-                                .frame(height: 20)
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let iconSize = min(224, max(118, width * 0.42))
+            let titleSize = min(48, max(36, width * 0.10))
+            ZStack {
+                Background()
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        UIApplication.shared.endEditing()
+                    }
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false){
+                        VStack(spacing: 24) {
+                            Spacer()
+                            
+                            Image("AppImage")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: iconSize, height: iconSize)
+                                .rotationEffect(.degrees(-4))
+                                .padding(.bottom, 4)
+                                .padding(.top, 32)
+                            
+                            Text("Gagged")
+                                .font(.system(size: titleSize, weight: .heavy))
+                                .foregroundColor(Color.theme.accent)
+                                .kerning(-0.03 * titleSize)
+                                .padding(.bottom, 4)
+                            
+                            Text("Login failed, please try again")
+                                .font(.footnote)
+                                .foregroundStyle(Color.theme.darkRed)
+                                .opacity(failure ? 1 : 0)
+                            
+                            // Email
+                            TextField("Email", text: $email)
+                                .keyboardType(.emailAddress)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .padding()
-                                .id("password")
-
-                                Button {
-                                    showPassword.toggle()
-                                } label: {
-                                    Image(systemName: showPassword ? "eye" : "eye.slash")
-                                        .frame(height: 20)
-                                        .foregroundStyle(Color.theme.gray.opacity(0.7))
+                                .glassEffect()
+                                .id("email")
+                                .focused($emailPassFocused, equals: .email)
+                                .submitLabel(.next)
+                                .onSubmit {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        emailPassFocused = .password
+                                    }
                                 }
-                                .padding(.trailing, 12)
-                            }
-                            .glassEffect()
                             
-                            Text("Forgot Password?")
-                                .font(.caption)
-                                .foregroundStyle(Color.theme.darkBlue)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .onTapGesture {
-                                    showResetSheet = true
+                            // Password with eye
+                            VStack {
+                                HStack {
+                                    ZStack {
+                                        TextField("Password", text: $password)
+                                            .focused($emailPassFocused, equals: .password)
+                                            .opacity(showPassword ? 1 : 0)
+                                        SecureField("Password", text: $password)
+                                            .focused($emailPassFocused, equals: .password)
+                                            .opacity(showPassword ? 0 : 1)
+                                    }
+                                    .submitLabel(.done)
+                                    .frame(height: 20)
+                                    .autocapitalization(.none)
+                                    .disableAutocorrection(true)
+                                    .padding()
+                                    .id("password")
+                                    
+                                    Button {
+                                        showPassword.toggle()
+                                    } label: {
+                                        Image(systemName: showPassword ? "eye" : "eye.slash")
+                                            .frame(height: 20)
+                                            .foregroundStyle(Color.theme.gray.opacity(0.7))
+                                    }
+                                    .padding(.trailing, 12)
                                 }
-                                .padding(.leading, 4)
-                                .padding(.top, 2)
+                                .glassEffect()
+                                
+                                Text("Forgot Password?")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.theme.darkBlue)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .onTapGesture {
+                                        showResetSheet = true
+                                    }
+                                    .padding(.leading, 4)
+                                    .padding(.top, 2)
+                                
+                            }
                             
+                            // Login Button
+                            Button {
+                                Task {
+                                    failure = false
+                                    print("trying login func")
+                                    let success = await loginViewModel.login(
+                                        email: email,
+                                        password: password
+                                    )
+                                    failure = !success
+                                    if success {
+                                        isLoggedIn = true
+                                    }
+                                }
+                            } label: {
+                                Text("Login")
+                                    .font(.headline)
+                                    .foregroundColor(Color.theme.background)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.theme.darkBlue)
+                                    )
+                            }
+                            .padding(.top, 8)
+                            
+                            // Create Account
+                            Button {
+                                withAnimation(.easeInOut) {
+                                    hasOnboarded = false
+                                    userId = ""
+                                }
+                            } label: {
+                                Text("Create Account")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.theme.darkBlue)
+                            }
+                            .padding(.top, 8)
+                            
+                            Spacer()
                         }
-
-                        // Login Button
-                        Button {
-                            Task {
-                                failure = false
-                                print("trying login func")
-                                let success = await loginViewModel.login(
-                                    email: email,
-                                    password: password
-                                )
-                                failure = !success
-                                if success {
-                                    isLoggedIn = true
+                        .padding(.horizontal, 32)
+                    }
+                    .animation(.easeInOut(duration: 0.25), value: emailPassFocused)
+                    .onChange(of: emailPassFocused) { newValue in
+                        if let target = newValue {
+                            isProgrammatic = true
+                            DispatchQueue.main.async {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo(target.rawValue, anchor: .center)
                                 }
                             }
-                        } label: {
-                            Text("Login")
-                                .font(.headline)
-                                .foregroundColor(Color.theme.background)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.theme.darkBlue)
-                                )
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: {
+                                isProgrammatic = false
+                            })
                         }
-                        .padding(.top, 8)
-
-                        // Create Account
-                        Button {
-                            withAnimation(.easeInOut) {
-                                hasOnboarded = false
-                                userId = ""
-                            }
-                        } label: {
-                            Text("Create Account")
-                                .font(.subheadline)
-                                .foregroundStyle(Color.theme.darkBlue)
-                        }
-                        .padding(.top, 8)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 32)
-                }
-                .animation(.easeInOut(duration: 0.25), value: emailPassFocused)
-                .onChange(of: emailPassFocused) { newValue in
-                    if let target = newValue {
-                        isProgrammatic = true
-                        DispatchQueue.main.async {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(target.rawValue, anchor: .center)
-                            }
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: {
-                            isProgrammatic = false
-                        })
                     }
                 }
-            }
-            .onScrollPhaseChange { _, _ in
-                guard !isProgrammatic else {return}
-                UIApplication.shared.endEditing()
+                .onScrollPhaseChange { _, _ in
+                    guard !isProgrammatic else {return}
+                    UIApplication.shared.endEditing()
+                }
             }
         }
         .sheet(isPresented: $showResetSheet) {
