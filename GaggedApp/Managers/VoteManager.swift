@@ -77,25 +77,32 @@ class VoteManager {
     
     func deleteVote(postId: String, userId: String) async throws {
         let voteId = "\(postId)\(userId)"
+        print(voteId)
         let voteRef = votesCollection.document(voteId)
-
+        print(voteRef)
         let voteSnap = try await voteRef.getDocument()
         guard let data = voteSnap.data(),
               let timestamp = data["timestamp"] as? Timestamp,
               let upvote = data["upvote"] as? Bool
         else { throw VoteError.deleteFailed }
+        
+        print(data)
 
         let week = weekId(from: timestamp.dateValue())
         let statsDocId = "\(postId)_\(week)"
         let statsRef = weekStatsCollection.document(statsDocId)
-
+        print(statsDocId)
+        print(statsRef)
         do {
             try await Firestore.firestore().runTransaction { tx, _ in
                 tx.updateData([
                     upvote ? "upvotes" : "downvotes": FieldValue.increment(Int64(-1))
                 ], forDocument: statsRef)
+                
+                print("updated stats")
 
                 tx.deleteDocument(voteRef)
+                print("updated vote")
                 return nil
             }
         } catch {

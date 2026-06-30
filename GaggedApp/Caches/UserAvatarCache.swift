@@ -13,7 +13,7 @@ final class UserAvatarCache {
     private var cache: [String: String] = [:] // userId → avatarId
 
     func getAvatar(for userId: String) -> String? {
-        return cache[userId] ?? ""
+        return cache[userId]
     }
 
     func setAvatar(_ avatarId: String, for userId: String) {
@@ -22,5 +22,9 @@ final class UserAvatarCache {
 
     func invalidate(userId: String) {
         cache[userId] = nil
+    }
+    
+    func clearAll() {
+        cache.removeAll()
     }
 }

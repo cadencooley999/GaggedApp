@@ -94,6 +94,7 @@ final class AddPostViewModel: ObservableObject {
             let imageId = UUID().uuidString
             let postRef = Firestore.firestore().collection("Posts").document()
                     
+            print(profImageUrl)
             let post = PostModel(id: "", text: text, name: name, imageUrl: "", createdAt: Timestamp(date: Date()), authorId: authorId, authorName: username, authorPicUrl: profImageUrl, height: 120, cityIds: cityIds, tags: selectedTags.map({$0.title}), keywords: [], upvotes: 0, downvotes: 0)
             
             try await postManager.uploadPost(post: post, postRef: postRef)

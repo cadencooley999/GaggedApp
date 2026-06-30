@@ -95,7 +95,9 @@ final class PostViewModel: ObservableObject {
     
     func setPost(postSelection: PostModel) {
         var newPost = postSelection
+        print(avatarCacheManager)
         if let cachedAddress = avatarCacheManager.getAvatar(for: postSelection.authorId) {
+            print(cachedAddress)
             newPost.authorPicUrl = cachedAddress
         }
         post = newPost
@@ -296,7 +298,7 @@ final class PostViewModel: ObservableObject {
         }
     }
     
-    func fetchChildren(limit: Int = 10, rootComment: viewCommentModel) async throws {
+    func fetchChildren(limit: Int = 10, rootComment: viewCommentModel, blockedUserIds: [String]) async throws {
         // if has more, show button
         // if has loaded replies just expand = true
         // if has loaded and expand == true, if has more then fetch more and then store and cache
@@ -308,7 +310,7 @@ final class PostViewModel: ObservableObject {
                     newRoot.commentThreadState?.isExpanded = true
                 }
                 if rootComment.commentThreadState?.hasMore == true || (rootComment.comment.hasChildren && rootComment.commentThreadState?.children.isEmpty == true){
-                    let response = try await commentManager.fetchChildren(ancestorId: rootComment.id, limit: limit, cursor: rootComment.commentThreadState?.cursor)
+                    let response = try await commentManager.fetchChildren(ancestorId: rootComment.id, limit: limit, blockedUserIds: blockedUserIds, cursor: rootComment.commentThreadState?.cursor)
                     newRoot.commentThreadState?.cursor = response.1
                     if let threadState = newRoot.commentThreadState {
                         let seenChildrenIds = Set(threadState.children.map(\.id))

@@ -958,6 +958,7 @@ struct ImageOverlay: View {
                         Task {
                             chosenProfileImageAddress = newChosenAddress!
                             try await profVM.setNewProfileImage(address: newChosenAddress!)
+                            print("Setting?")
                             showImageOverlay = false
                         }
                     }

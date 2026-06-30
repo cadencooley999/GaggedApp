@@ -852,6 +852,7 @@ struct AddPostView: View {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             if vm.pickedImage != nil {
                                 vm.pickedImage = nil
+                                vm.imageSelection = nil
                             }
                         }
                     } label: {

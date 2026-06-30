@@ -445,7 +445,7 @@ struct ForgotPasswordSheet: View {
             try await userManager.forgotPassword(email: email)
             timeout = true
             message = "Reset email sent"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
                 timeout = false
             }
         } catch {

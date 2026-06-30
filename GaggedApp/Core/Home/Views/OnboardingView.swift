@@ -159,12 +159,12 @@ struct OnboardingView: View {
                         .padding(.bottom, 4)
 
                     HStack(spacing: 10) {
+                        Chip(label: "snoop", style: .blue)
+                        Chip(label: "scheme", style: .gold)
                         Chip(label: "gossip", style: .blue)
-                        Chip(label: "sleuthing", style: .gold)
-                        Chip(label: "your pool", style: .blue)
                     }
 
-                    Text("the nosy app for keeping up with everyone around you")
+                    Text("Keep tabs on your city. Don't be surprised if it gets messy.")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundColor(Color.theme.accent.opacity(0.45))
                         .multilineTextAlignment(.center)

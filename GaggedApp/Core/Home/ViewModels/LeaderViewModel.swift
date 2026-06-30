@@ -77,9 +77,9 @@ final class LeaderViewModel: ObservableObject {
         do {
             let (up, week, down) = try await (allUp, thisWeek, allDown)
             
-            allTimeUp.append(contentsOf: up)
-            thisWeekUp.append(contentsOf: week.0)
-            allTimeDown.append(contentsOf: down)
+            allTimeUp.append(contentsOf: up.sorted(by: {$0.upvotes > $1.upvotes}))
+            thisWeekUp.append(contentsOf: week.0.sorted(by: {$0.upvotes > $1.upvotes}))
+            allTimeDown.append(contentsOf: down.sorted(by: {$0.upvotes < $1.upvotes}))
             
             weekStats = week.1
         } catch {

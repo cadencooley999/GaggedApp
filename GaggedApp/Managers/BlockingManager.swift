@@ -37,6 +37,7 @@ class BlockingManager {
         let blockedByRef = usersCollection.document(targetId).collection("BlockedBy").document(userId)
         batch.setData(["createdAt": FieldValue.serverTimestamp()], forDocument: blockedRef)
         batch.setData(["createdAt":FieldValue.serverTimestamp()], forDocument: blockedByRef)
+        print("Blocked User ", userId, targetId)
         try await batch.commit()
     }
 

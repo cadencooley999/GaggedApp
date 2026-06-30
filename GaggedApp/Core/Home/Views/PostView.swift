@@ -20,6 +20,11 @@ struct PostView: View {
     @EnvironmentObject var profileViewModel: ProfileViewModel
     @EnvironmentObject var addPostViewModel: AddPostViewModel
     @EnvironmentObject var windowSize: WindowSize
+    @EnvironmentObject var feedStore: FeedStore
+    @EnvironmentObject var pollsViewModel: PollsViewModel
+    @EnvironmentObject var searchViewModel: SearchViewModel
+    @EnvironmentObject var inspectionViewModel: InspectionViewModel
+    @EnvironmentObject var leaderViewModel: LeaderViewModel
     
     @Environment(\.colorScheme) var scheme
     
@@ -48,10 +53,14 @@ struct PostView: View {
     @State var selectedItemForOptions: GenericItem? = nil
     @State var showProfilePopup: Bool = false
     @State var userForDisplay: UserModel? = nil
-    @State var thingHeldId: String = ""
     @State var isNamePressed: Bool = false
     @State var isCommentTextFieldFocusedState: Bool = false
     @State var voteInFlight: Bool = false    
+    
+    @State private var showNameActions: Bool = false
+    @State private var heldUserId: String? = nil
+    @State private var heldUserName: String = ""
+    
     @Binding var screenType: ScreenType
     
     @Namespace var commentBubbles
@@ -175,6 +184,57 @@ struct PostView: View {
                 .presentationBackground(.ultraThickMaterial) // or .regularMaterial
                 .background(Color.black.opacity(1)) // makes it darker
         }
+        .sheet(isPresented: $showNameActions) {
+            VStack(spacing: 12) {
+                Button {
+                    guard let targetId = heldUserId, targetId != userId else {
+                        showNameActions = false
+                        return
+                    }
+                    Task {
+                        try? await BlockingManager.shared.blockUser(userId: userId, targetId: targetId)
+                        feedStore.blocked.insert(targetId)
+
+                        // Reset all feeds/state that can cache content
+                        homeViewModel.reset()
+                        pollsViewModel.reset()
+                        searchViewModel.resetGlobalPosts()
+                        searchViewModel.resetGlobalPolls()
+                        profileViewModel.resetSaved()
+                        postViewModel.resetRootComments()
+                        leaderViewModel.reset()
+                         
+                        if let postId = postViewModel.post?.id {
+                            print("Clearing post ", postId)
+                            CommentsCache.shared.clearPost(postId: postId)
+                        }
+                            
+                        try await postViewModel.loadInitialRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
+                        
+                        showNameActions = false
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "xmark.square")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Color.theme.brightRed)
+                        Text("Block \(heldUserName != "" ? heldUserName : "user")")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Color.theme.brightRed)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 56)
+                    .contentShape(Rectangle())
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
+                }
+                Spacer()
+            }
+            .padding()
+            .presentationDetents([.fraction(0.25)])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.ultraThickMaterial)
+        }
     }
     
     var header: some View {
@@ -270,40 +330,26 @@ struct PostView: View {
             HStack(alignment: .top) {
                 HStack(alignment: .top){
                     ProfilePic(address: com.comment.authorId == userId ? chosenProfileImageAddress : com.comment.authorProfPic, size: 25)
-                        .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
-//                        .onLongPressGesture {
-//                            profileTask?.cancel()
-//
-//                            profileTask = Task {
-//                                async let skeletonDelay: Void = {
-//                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-//                                    await MainActor.run { showProfilePopup = true }
-//                                }()
-//                                let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
-//                                await MainActor.run {
-//                                    withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
-//                                }
-//                            }
-//                        }
+                        .onLongPressGesture(minimumDuration: 0.35) {
+                            guard com.comment.authorId != userId else { return }
+                            heldUserId = com.comment.authorId
+                            heldUserName = com.comment.authorName
+                            showNameActions.toggle()
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
 
                     VStack(alignment: .leading){
                         HStack {
                             Text(com.comment.authorId == userId ? username : com.comment.authorName)
                                 .font(.caption)
-                                .scaleEffect(thingHeldId == com.id ? 0.9 : 1)
-//                                .onLongPressGesture {
-//                                    profileTask?.cancel()
-//                                    profileTask = Task {
-//                                        async let skeletonDelay: Void = {
-//                                            try? await Task.sleep(nanoseconds: 1_500_000_000)
-//                                            await MainActor.run { showProfilePopup = true }
-//                                        }()
-//                                        let author = try? await postViewModel.fetchPostAuthor(authorId: com.comment.authorId)
-//                                        await MainActor.run {
-//                                            withAnimation(.easeInOut(duration: 0.2)) { userForDisplay = author }
-//                                        }
-//                                    }
-//                                }
+                                .onLongPressGesture(minimumDuration: 0.35) {
+                                    guard com.comment.authorId != userId else { return }
+                                    guard com.comment.authorId != nil else { return }
+                                    heldUserId = com.comment.authorId
+                                    heldUserName = com.comment.authorName
+                                    showNameActions.toggle()
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
 
                             Text(postViewModel.timeAgoString(from: com.comment.createdAt))
                                 .font(.caption)
@@ -400,7 +446,7 @@ struct PostView: View {
                             }
                         }
                     }
-                    if (parent.commentThreadState?.isExpanded == false) || parent.commentThreadState?.hasMore == true || (parent.comment.hasChildren && parent.commentThreadState?.children.isEmpty == true)  {
+                    if (parent.commentThreadState?.isExpanded == false) || parent.commentThreadState?.hasMore == true || (parent.comment.hasChildren && parent.commentThreadState?.children.isEmpty == true) {
                         HStack {
                             Rectangle()
                                 .fill(Color.theme.gray)
@@ -414,7 +460,7 @@ struct PostView: View {
                         }
                         .onTapGesture {
                             Task {
-                                try await postViewModel.fetchChildren(rootComment: parent)
+                                try await postViewModel.fetchChildren(rootComment: parent, blockedUserIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -431,7 +477,6 @@ struct PostView: View {
                 .onAppear {
                     if parent.id == postViewModel.rootComments.last?.id && postViewModel.hasMoreComments == true {
                         Task {
-                            print("has more?")
                             try await postViewModel.fetchRootComments(blockedIds: Array(Set(homeViewModel.blocked + homeViewModel.blockedBy)))
                         }
                     }

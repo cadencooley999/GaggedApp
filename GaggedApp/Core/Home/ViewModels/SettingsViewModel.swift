@@ -28,6 +28,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var nameMentionCity: City? = nil
     
     let userManager = UserManager.shared
+    let avatarCacheManager = UserAvatarCache.shared
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -198,6 +199,7 @@ final class SettingsViewModel: ObservableObject {
     func logOut(userId: String) {
         Task {
             try await userManager.signOutUser()
+            avatarCacheManager.clearAll()
             CoreDataManager.teardown()
             UserListenerManager.shared.stopUserListener()
             isLoggedIn = false
@@ -207,6 +209,7 @@ final class SettingsViewModel: ObservableObject {
     func deleteAccount(password: String) async throws -> Bool {
         do {
             try await userManager.reauthAndDelete(email: userEmail, password: password)
+            avatarCacheManager.clearAll()
             CoreDataManager.teardown()
             UserListenerManager.shared.stopUserListener()
             return true

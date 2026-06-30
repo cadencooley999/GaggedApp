@@ -159,5 +159,6 @@ struct BlockedUsersView: View {
         profileViewModel.resetSaved()
         postViewModel.resetRootComments()
         leaderViewModel.reset()
+        CommentsCache.shared.clearCache()
     }
 }
